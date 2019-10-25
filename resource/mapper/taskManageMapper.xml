@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.fhtpay.task.dao.TaskManageDao">
+	<select id="queryAllTaskList" resultType="com.fhtpay.task.model.TaskInfo">
+		select * from gw_task_info
+	</select>
+	<update id="updateTaskExcuTimeByNameAndGroupName">
+		update gw_task_info set lastexcutime = SYSDATE() where jobName = #{taskInfo.jobName} and jobGroup = #{taskInfo.jobGroup}
+	</update>
+	<select id="queryTaskInfoByTaskNameAndGroupName" resultType="com.fhtpay.task.model.TaskInfo">
+		select * from gw_task_info where jobName = #{taskName} and jobGroup = #{groupName}
+	</select>
+	
+	<insert id="saveTaskExcuLog">
+		insert into gw_task_excu_log (jobName,jobGroup,triggerName,triggerGroupName,processClass,cronExpression,status,lastexcutime,errorMsg,remark) 
+		values(#{taskInfo.jobName},#{taskInfo.jobGroup},#{taskInfo.triggerName},#{taskInfo.triggerGroupName},#{taskInfo.processClass},#{taskInfo.cronExpression},#{taskInfo.status},SYSDATE(),#{taskInfo.errorMsg},#{taskInfo.remark})
+	</insert>
+</mapper>

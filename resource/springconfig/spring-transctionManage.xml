@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:dwr="http://www.directwebremoting.org/schema/spring-dwr"
+	xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.0.xsd
+	     	http://www.directwebremoting.org/schema/spring-dwr http://www.directwebremoting.org/schema/spring-dwr-2.0.xsd
+           	http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-2.0.xsd          
+			http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-2.0.xsd">
+
+    <bean id="transactionManageDao" class="org.mybatis.spring.MapperFactoryBean">  
+        <property name="mapperInterface" value="com.fhtpay.transaction.dao.TransactionManageDao"/>  
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+    </bean>
+    <bean id="transactionManageService" class="com.fhtpay.transaction.serviceimpl.TransactionManageServiceImpl">
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="merchantAccountCashByTN" class="com.fhtpay.task.service.MerchantAccountCashByTN">
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="merchantAccountCashBySigned" class="com.fhtpay.task.service.MerchantAccountCashBySigned">
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+     <bean id="merchantAccountCashBySendGoods" class="com.fhtpay.task.service.MerchantAccountCashBySendGoods">
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="sendTransSuccessToCardHolder" class="com.fhtpay.task.service.emailservice.SendTransSuccessToCardHolder">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="sendTransSuccessToMerchant" class="com.fhtpay.task.service.emailservice.SendTransSuccessToMerchant">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="sendTransFailToCardHolder" class="com.fhtpay.task.service.emailservice.SendTransFailToCardHolder">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="sendCreateShipmentToCardHolder" class="com.fhtpay.task.service.emailservice.SendCreateShipmentToCardHolder">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="sendRefundSuccessToCardHolder" class="com.fhtpay.task.service.emailservice.SendRefundSuccessToCardHolder">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="sendAddRefuseToMerchant" class="com.fhtpay.task.service.emailservice.SendAddRefuseToMerchant">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="sendAddComplainToMerchant" class="com.fhtpay.task.service.emailservice.SendAddComplainToMerchant">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="sendReplyComplainToMerchant" class="com.fhtpay.task.service.emailservice.SendReplyComplainToCardHolder">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    <bean id="sendReplyComplainToCardHolder" class="com.fhtpay.task.service.emailservice.SendReplyComplainToMerchant">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    
+    <bean id="sendMerchantRegEmail" class="com.fhtpay.task.service.emailservice.SendMerchantRegEmailImpl">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+ 	
+ 	<bean id="sendPayPendingToCardHolder" class="com.fhtpay.task.service.emailservice.SendPayPendingToCardHolderImpl">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    
+    <bean id="sendSurveyToMerchant" class="com.fhtpay.task.service.emailservice.SendSurveyToMerchantImpl">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    
+    <bean id="sendAuthorizationToCardHolder" class="com.fhtpay.task.service.emailservice.SendAuthorizationToCardHolder">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    
+    <bean id="sendAuthorizationToMerchant" class="com.fhtpay.task.service.emailservice.SendAuthorizationToMerchant">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    
+    <bean id="sendCancellationToCardHolder" class="com.fhtpay.task.service.emailservice.SendCancellationToCardHolder">
+    	<property name="emailSend" ref="emailSend"></property>
+    	<property name="transactionManageDao" ref="transactionManageDao"></property>
+    </bean>
+    
+    
+ 	<bean id="emailSend" class="com.fhtpay.task.service.emailservice.EmailSendImpl">
+ 		<property name="freeMarkerConfigurer" ref="freeMarker"/>
+ 		<property name="taskExecutor" ref="taskExecutor"></property>
+ 		<property name="mailSender" ref="mailSender"/>
+ 		<property name="transactionManageDao" ref="transactionManageDao"></property>
+ 	</bean>
+ 	<bean id="taskExecutor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
+		<property name ="corePoolSize" value ="50" /> 
+    	<property name ="keepAliveSeconds" value ="30000" /> 
+    	<property name ="maxPoolSize" value ="150" /> 
+    	<property name ="queueCapacity" value ="1000" />
+	</bean>
+	<!-- 邮件发送服务配置 -->
+    <bean id="mailSender" class="org.springframework.mail.javamail.JavaMailSenderImpl">  
+	    <property name="host" value="smtp.qiye.163.com"></property>  
+	    <property name="username" value="auto1@virtuousbill.com"></property>  
+	    <property name="password" value="fuhuitong1802"></property>  
+	    <property name="javaMailProperties">
+	        <props>
+	        	<prop key="mail.smtp.auth">true</prop>
+		       	<prop key="mail.smtp.timeout">25000</prop>
+		       	<prop key="mail.smtp.port">25</prop>
+	        </props>
+	    </property>
+	</bean>
+    <bean id="freeMarker" class="org.springframework.web.servlet.view.freemarker.FreeMarkerConfigurer">
+		<property name="templateLoaderPath" value="classpath:com/fhtpay/template" /><!--指定模板文件目录 -->
+		<property name="freemarkerSettings"><!-- 设置FreeMarker环境属性 -->
+			<props>
+				<prop key="template_update_delay">1800</prop><!--刷新模板的周期，单位为秒 -->
+				<prop key="default_encoding">UTF-8</prop><!--模板的编码格式 -->
+			</props>
+		</property>
+	</bean>
+	
+	<!-- 可疑订单 -->
+	<!-- 规则处理类 -->
+	<bean id="containsRuleProcessService" class="com.fhtpay.task.service.suspicious.ContainsSuspiciousRuleProcessServiceImpl">
+		<property name="transactionManageDao" ref="transactionManageDao"/>
+	</bean>
+	<bean id="eqRuleProcessService" class="com.fhtpay.task.service.suspicious.EqSuspiciousRuleProcessServiceImpl">
+		<property name="transactionManageDao" ref="transactionManageDao"/>
+	</bean>
+	<bean id="gtRuleProcessService" class="com.fhtpay.task.service.suspicious.GtSuspiciousRuleProcessServiceImpl">
+		<property name="transactionManageDao" ref="transactionManageDao"/>
+	</bean>
+	<bean id="ltRuleProcessService" class="com.fhtpay.task.service.suspicious.LtSuspiciousRuleProcessServiceImpl">
+		<property name="transactionManageDao" ref="transactionManageDao"/>
+	</bean>
+	<bean id="ncontainsRuleProcessService" class="com.fhtpay.task.service.suspicious.NcontainsSuspiciousRuleProcessServiceImpl">
+		<property name="transactionManageDao" ref="transactionManageDao"/>
+	</bean>
+	<bean id="neqRuleProcessService" class="com.fhtpay.task.service.suspicious.NeqRuleProcessServiceImpl">
+		<property name="transactionManageDao" ref="transactionManageDao"/>
+	</bean>
+	<bean id="sameParameterMatchRuleProcessSevice" class="com.fhtpay.task.service.suspicious.SameParameterMatchRuleProcessSevice">
+		<property name="transactionManageDao" ref="transactionManageDao"/>
+	</bean>
+	
+	<!-- 发送短信处理类 -->
+    <bean id="messageSend" class="com.fhtpay.task.service.messageservice.MessageSendImpl">
+    	<property name="taskExecutor" ref="taskExecutor"/>
+    	<property name="transactionManageDao" ref="transactionManageDao"/>
+    </bean>
+    
+    <bean id="sendMessageToUser" class="com.fhtpay.task.service.messageservice.SendWarnMessageToUser">
+    	<property name="messageSend" ref="messageSend"/>
+    	<property name="transactionManageDao" ref="transactionManageDao"/>
+    </bean>
+    
+    <!-- 发送交易预警邮件 -->
+    <bean id="sendTransWarnToUser" class="com.fhtpay.task.service.emailservice.warn.SendTransWarnToUser">
+    	<property name="transactionManageDao" ref="transactionManageDao"/>
+    	<property name="emailSend" ref="emailSend"/>
+    </bean>
+    
+    <!-- 退款返回信息 -->
+    <bean id="refundReturnImpl" class="com.fhtpay.task.service.refundReturn.RefundReturnImpl">
+    	<property name="taskExecutor" ref="taskExecutor"/>
+    	<property name="transactionManageService" ref="transactionManageService"/>
+    </bean>
+    
+    <bean id="refundReturnToUser" class="com.fhtpay.task.service.refundReturn.RefundReturnToUser">
+    	<property name="refundReturnImpl" ref="refundReturnImpl"/>
+    	<property name="transactionManageDao" ref="transactionManageDao"/>
+    </bean>
+    
+    <bean id="callbackEmailSend" class="com.fhtpay.task.service.emailservice.callback.EmailSendImpl">
+ 		<property name="freeMarkerConfigurer" ref="freeMarker"/>
+ 		<property name="taskExecutor" ref="taskExecutor"></property>
+ 		<property name="mailSender" ref="mailSender"/>
+ 		<property name="transactionManageDao" ref="transactionManageDao"></property>
+ 	</bean>
+    
+    <bean id="sendTransCallbackToMerchant" class="com.fhtpay.task.service.emailservice.callback.SendTransCallbackToCardHolderImpl">
+    	<property name="transactionManageDao" ref="transactionManageDao"/>
+    	<property name="callbackEmailSend" ref="callbackEmailSend"></property>
+    </bean>
+    
+    
+    <!-- 修改EMS运单状态 -->
+    <!-- <bean id="queryTraceService" class="com.fhtpay.task.service.tracequery.QueryTraceServiceImpl">
+    </bean>
+    
+    <bean id="waybillstate" class="com.fhtpay.task.service.tracequery.WaybillstateChangeImpl">
+    	<property name="queryTraceService" ref="queryTraceService"/>
+    	<property name="transactionManageDao" ref="transactionManageDao"/>
+    </bean> -->
+    
+</beans>

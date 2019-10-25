@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"    
+	xmlns:context="http://www.springframework.org/schema/context"    
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+	xmlns:aop="http://www.springframework.org/schema/aop"
+	xmlns:tx="http://www.springframework.org/schema/tx"
+	xsi:schemaLocation="
+	http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.2.xsd  
+	http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-3.2.xsd 
+	http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx-3.2.xsd
+	http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.2.xsd">
+	
+	<context:component-scan base-package="com.fhtpay.*" />
+	<aop:aspectj-autoproxy />
+	<bean id="propertyConfigurer" class="com.fhtpay.common.SysPropertiesConfig">
+        <property name="locations">
+            <list>
+                <value>classpath:jdbc.properties</value>
+                <!--要是有多个配置文件，只需在这里继续添加即可 -->
+            </list>
+        </property>
+    </bean>
+
+	<!--配置数据源  -->
+    <bean id="dataSource"  class="com.alibaba.druid.pool.DruidDataSource">  
+        <property name="driverClassName"> 
+        	<value>com.mysql.jdbc.Driver</value> 
+        </property>
+        <property name="url">
+			<value>${jdbc.url}</value> 
+        </property>
+        <property name="username">
+        	<value>${jdbc.username}</value>
+        </property>
+        <property name="password">
+        	<value>${jdbc.password}</value>
+        </property>
+        <property name="maxActive">
+        	<value>10</value>
+        </property>
+        <property name="maxWait">
+        	<value>120000</value> 
+        </property>
+        <!-- 连接池中连接，在时间段内一直空闲，被逐出连接池的时间，默认为30分钟 -->
+        <property name="minEvictableIdleTimeMillis">
+        	<value>15</value> 
+        </property>
+        <!-- 超过时间限制，回收没有用(废弃)的连接（默认为 300秒，调整为180） -->
+        <property name="removeAbandonedTimeout">
+        	<value>180</value>
+        </property>
+        <property name="removeAbandoned">
+        	<value>true</value>
+        </property>
+    </bean>
+    
+	<bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource"/>
+	</bean>
+	<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">     
+        <property name="configLocation" value="classpath:mybatis-config.xml" />     
+        <property name="dataSource" ref="dataSource" />
+    </bean>
+	
+	<aop:config>
+		<aop:advisor pointcut="execution(* com.fhtpay.*.service.*.*(..))" advice-ref="txAdvice" />
+		<aop:advisor pointcut="execution(* com.fhtpay.*.*.service.*.*(..))" advice-ref="txAdvice" />
+		<aop:advisor pointcut="execution(* com.fhtpay.*.*.*.service.*.*(..))" advice-ref="txAdvice" />
+		<aop:advisor pointcut="execution(* com.fhtpay.*.serviceimpl.*.*(..))" advice-ref="txAdvice" />
+		<aop:advisor pointcut="execution(* com.fhtpay.*.*.serviceimpl.*.*(..))" advice-ref="txAdvice" />
+		<aop:advisor pointcut="execution(* com.fhtpay.*.*.*.serviceimpl.*.*(..))" advice-ref="txAdvice" />
+	</aop:config>
+	<tx:advice id="txAdvice" transaction-manager="transactionManager">
+		<tx:attributes>
+			<tx:method name="insert*" propagation="REQUIRED" isolation="READ_COMMITTED" rollback-for="Throwable"/>
+			<tx:method name="add*" propagation="REQUIRED" isolation="READ_COMMITTED" rollback-for="Throwable"/>
+			<tx:method name="update*" propagation="REQUIRED" isolation="READ_COMMITTED" rollback-for="Throwable"/>
+			<tx:method name="modify*" propagation="REQUIRED" isolation="READ_COMMITTED" rollback-for="Throwable"/>
+			<tx:method name="save*" propagation="REQUIRED" isolation="READ_COMMITTED" rollback-for="Throwable"/>
+			<tx:method name="delete*" propagation="REQUIRED" isolation="READ_COMMITTED" rollback-for="Throwable"/>
+			<tx:method name="process*" propagation="REQUIRED" isolation="READ_COMMITTED" rollback-for="Throwable"/>
+			<tx:method name="query*" propagation="REQUIRED" isolation="READ_COMMITTED" rollback-for="Throwable"/>
+			<tx:method name="start*" propagation="REQUIRED" isolation="READ_COMMITTED" rollback-for="Throwable"/>
+			<tx:method name="*" read-only="true"/>
+		</tx:attributes>
+	</tx:advice>
+	
+	<import resource="classpath:springconfig/**/spring-*.xml" />
+    <import resource="classpath:springconfig/**/**/spring-*.xml" />
+    <import resource="classpath:springconfig/**/**/**/spring-*.xml" />
+    	
+</beans>

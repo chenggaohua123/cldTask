@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--this file was created by Eclipse Runnable JAR Export Wizard-->
+<!--ANT 1.7 is required                                        -->
+<project default="paymentTaskManage" name="paymentTaskManage" basedir=".">
+	<mkdir dir="${basedir}/paymentTaskManage" />
+	<mkdir dir="${basedir}/paymentTaskManage/log" />
+	<mkdir dir="${basedir}/paymentTaskManage/cfg" />
+	<mkdir dir="paymentTaskManage/lib" />
+	<copy todir="paymentTaskManage/lib" >
+		<fileset dir="../lib/"/>
+	</copy>
+	<copy todir="paymentTaskManage/cfg" >
+			<fileset dir="../cfg/"/>
+	</copy>
+	<copy todir="paymentTaskManage" >
+		<fileset file="run.bat"/>
+	</copy>
+	<copy todir="paymentTaskManage" >
+		<fileset file="run.sh"/>
+	</copy>
+	<copy todir="${basedir}/paymentTaskManage/classes" >
+		<fileset dir="../resource/"/>
+	</copy>
+	<path id="libraries">
+		<fileset dir="paymentTaskManage/lib">
+			<include name="*.jar" />
+		</fileset>
+	</path>
+	<target name="paymentTaskManage">
+        <pathconvert property="tasklib" pathsep="">
+            <path refid="libraries" />
+        <flattenmapper />
+        </pathconvert>
+		<mkdir dir ="${basedir}/paymentTaskManage/classes"/>
+		<javac srcdir ="../src" includeantruntime="on" classpathref="libraries"  destdir ="${basedir}/paymentTaskManage/classes" encoding="UTF-8"></javac>
+	</target>
+</project>

@@ -1,0 +1,2892 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.fhtpay.transaction.dao.TransactionManageDao">
+	<select id="queryTransCheckedInfo" resultType="com.fhtpay.transaction.model.TransCheckedInfo">
+		select * from gw_trans_check_log where status=0
+	</select>
+	<update id="updateTransInfo">
+		update gw_trans_info set 
+			relNo=#{info.relNo},
+			isChecked=1 
+		where 
+			tradeNo=#{info.tradeNo}
+			and 
+			bankCurrency=#{info.currency}
+			and 
+			bankTransAmount=#{info.amount}
+			and 
+			respCode='00'
+	</update>
+	<update id="updateTransInfoExpByTradeNo">
+		update gw_trans_info set 
+			isChecked=2 
+		where 
+			tradeNo=#{info.tradeNo}
+	</update>
+	<update id="updateTransCheckedInfoExpByTradeNo">
+		update gw_trans_check_log set 
+			status=2 
+		where 
+			tradeNo=#{info.tradeNo}
+	</update>
+	<update id="updateTransCheckedInfoSuccessByTradeNo">
+		update gw_trans_check_log set 
+			status=1
+		where 
+			tradeNo=#{info.tradeNo}
+	</update>
+	<select id="queryNoAccountMerchantInfo" resultType="com.fhtpay.transaction.model.MerchantAccount">
+		SELECT 
+			a.merNo,
+			a.terNo,
+			a.settleCurrency as currency 
+		FROM 
+			gw_merchant_terno_info a LEFT JOIN gw_merchant_account b ON a.merNo=b.merNo AND a.terNo=b.terNo
+		WHERE 
+			a.enabled=1 and b.merNo is null
+	</select>
+	<insert id="insertMerchantAccount">
+		insert into gw_merchant_account 
+		(
+			merNo,
+			terNo,
+			currency
+		)values(
+			#{info.merNo},
+			#{info.terNo},
+			#{info.currency}
+		)
+	</insert>
+	<!--  [access是否入账：0未入 1已入账],	[respCode交易状态：00交易成功],	[isChecked 0未勾兑 1已勾兑],-->
+	<!--  查询access 0未入账、isChecked 1已勾兑、respCode 00交易成功、流水号BR开头、transType交易类型为正是交易sales-->
+	<select id="queryTradeNoAccess" resultType="string">
+		select a.tradeNo from gw_trans_info a left join gw_merchant_account b on a.merNo=b.merNo and a.terNo=b.terNo where a.access=0 and a.isChecked=1 and a.respCode='00' and a.tradeNo like 'BR%' and a.transType='sales' and b.id is not null
+	</select>
+	<!--  查询未入账、交易成功的冻结订单-->
+	<select id="queryDJTradeNoAccess" resultType="string">
+		select a.tradeNo from gw_trans_info a left join gw_merchant_account b on a.merNo=b.merNo and a.terNo=b.terNo where a.access=0 and a.respCode='00' and a.tradeNo like 'DJ%' and b.id is not null
+	</select>
+	<!--  查询未入账、交易成功的解冻订单-->
+	<select id="queryJDTradeNoAccess" resultType="string">
+		select a.tradeNo from gw_trans_info a left join gw_merchant_account b on a.merNo=b.merNo and a.terNo=b.terNo where a.access=0 and a.respCode='00' and a.tradeNo like 'JD%' and b.id is not null
+	</select>
+	<!--  查询未入账、交易成功的退款订单-->
+	<select id="queryTKTradeNoAccess" resultType="string">
+		select a.tradeNo from gw_trans_info a left join gw_merchant_account b on a.merNo=b.merNo and a.terNo=b.terNo where a.access=0 and a.respCode='00' and a.tradeNo like 'TK%' and b.id is not null
+	</select>
+	<!--  查询未入账、交易成功的拒付订单-->
+	<select id="queryJFTradeNoAccess" resultType="string">
+		select a.tradeNo from gw_trans_info a left join gw_merchant_account b on a.merNo=b.merNo and a.terNo=b.terNo where a.access=0 and a.respCode='00' and a.tradeNo like 'JF%' and b.id is not null
+	</select>
+	<select id="queryMerchantAccountTotalAmount" resultType="com.fhtpay.transaction.model.MerchantAccountAccess">
+		<!-- 除退款拒付入账 -->
+		<if test="cashType != '-3' and cashType!= '-4' ">
+			select
+				merNo,
+				terNo,
+			 	accountID,
+			 	currency,
+			 	sum(totalAmount) as totalAmount,
+			 	sum(feeAmount) as feeAmount,
+			 	sum(bondAmount) as bondAmount
+			 	from
+					(select 
+						a.merNo,
+						a.terNo,
+						a.id as accountID,
+						a.currency,
+						b.merSettleAmount-b.merForAmount-b.bondAmount-b.singleFee as totalAmount,
+						b.merForAmount+b.singleFee as feeAmount,
+						b.bondAmount
+					from 
+						gw_merchant_account a right join gw_trans_info b on a.merNo=b.merNo and a.terNo=b.terNo
+					where 
+						b.tradeNo in
+						<foreach collection="list" item="tradeNo" index="index" open="(" close=")" separator=",">
+							#{tradeNo}
+						</foreach>
+					) as t
+			group by 
+				accountID,
+				 currency
+		</if>
+		<!-- 退款入账 -->
+	<if test="cashType == '-3' ">
+		select
+				merNo,
+				terNo,
+			 	accountID,
+			 	currency,
+			 	sum(totalAmount) as totalAmount,
+			 	sum(feeAmount) as feeAmount,
+			 	sum(bondAmount) as bondAmount,
+			 	sum(refundFee) as refundFee,
+			 	sum(refundTransFee) as refundTransFee
+			 	from
+					(select 
+						a.merNo,
+						a.terNo,
+						a.id as accountID,
+						a.currency,
+						b.merSettleAmount AS totalAmount,
+						b.merForAmount+b.singleFee as feeAmount,
+						b.bondAmount,
+						-IFNULL(b.refundFee,0) as refundFee,
+						-(
+						CASE  WHEN e.applyDate IS NULL THEN 0 WHEN DATE_ADD(d.transDate,INTERVAL  IFNULL(b.transRefundFeeStatus,0) HOUR)>=e.applyDate
+						THEN b.merSettleAmount/d.merSettleAmount*(d.merForAmount) ELSE 0 END
+						) as refundTransFee
+					from 
+						gw_merchant_account a right join gw_trans_info b on a.merNo=b.merNo and a.terNo=b.terNo
+						LEFT JOIN gw_trans_info_log c ON b.tradeNo=c.tradeNewNo
+						LEFT JOIN gw_trans_info d ON c.tradeNo=d.tradeNo
+						LEFT JOIN gw_refund_info e ON b.tradeNo=e.tradeNewNo
+					where 
+						b.tradeNo in
+						<foreach collection="list" item="tradeNo" index="index" open="(" close=")" separator=",">
+							#{tradeNo}
+						</foreach>
+					) as t
+			group by 
+				accountID,
+				 currency
+	</if>
+	<!-- 拒付入账 -->
+	<if test="cashType == '-4' ">
+		select
+				merNo,
+				terNo,
+			 	accountID,
+			 	currency,
+			 	sum(totalAmount) as totalAmount,
+			 	sum(feeAmount) as feeAmount,
+			 	sum(bondAmount) as bondAmount,
+			 	sum(disFee) as disFee
+			 	from
+					(select 
+						a.merNo,
+						a.terNo,
+						a.id as accountID,
+						a.currency,
+						b.merSettleAmount as totalAmount,
+						b.merForAmount+b.singleFee as feeAmount,
+						b.bondAmount,
+						-ifNull(b.disFee,0) disFee
+					from 
+						gw_merchant_account a right join gw_trans_info b on a.merNo=b.merNo and a.terNo=b.terNo
+						LEFT JOIN gw_trans_info_log c ON b.tradeNo=c.tradeNewNo
+						LEFT JOIN gw_trans_info d ON c.tradeNo=d.tradeNo
+					where 
+						b.tradeNo in
+						<foreach collection="list" item="tradeNo" index="index" open="(" close=")" separator=",">
+							#{tradeNo}
+						</foreach>
+					) as t
+			group by 
+				accountID,
+				 currency
+	</if>
+	</select>
+	<!-- 更新订单入账状态 -->
+	<update id="updateTransAccess">
+		update 
+			gw_trans_info 
+		set 
+			access=1
+		where 
+			tradeNo in
+			<foreach collection="list" item="tradeNo" index="index" open="(" close=")" separator=",">
+				#{tradeNo}
+			</foreach>
+	</update>
+	<insert id="insertMerchantAccountAccess">
+	insert into gw_merchant_account_access(
+			id,
+			merNo,
+			terNo,
+			accountID,
+			accountType,
+			currency,
+			amount,
+			moneyDate,
+			moneyRemark,
+			cashType,
+			moneyBy
+		)values(
+			#{info.id},
+			#{info.merNo},
+			#{info.terNo},
+			#{info.accountID},
+			#{info.accountType},
+			#{info.currency},
+			#{info.amount},
+			now(),
+			'sys',
+			#{info.cashType},
+			'sys'
+		)
+	</insert>
+	<update id="updateMerchantAccount">
+		update gw_merchant_account
+		set 
+			totalAmount=totalAmount+ifnull(#{info.totalAmount},0)
+			,cashAmount=cashAmount+ifnull(#{info.cashAmount},0)
+			,bondAmount=bondAmount+ifnull(#{info.bondAmount},0)
+			,bondCashAmount=bondCashAmount+ifnull(#{info.bondCashAmount},0)
+			,frozenAmount=frozenAmount+ifnull(#{info.frozenAmount},0)
+			,transFrozenAmount=transFrozenAmount+ifnull(#{info.transFrozenAmount},0)
+		where 
+			id=#{info.id}
+	</update>
+	<insert id="insertMerchantAccountAccessDetail">
+		insert into gw_merchant_account_access_detail(
+			accessId,
+			tradeNo,
+			batchNo,
+			createDate,
+			amount
+		)values(
+			#{info.accessId},
+			#{info.tradeNo},
+			#{info.batchNo},
+			now(),
+			#{info.amount}
+		)
+	</insert>
+	<select id="querySettleTypeInfo" resultType="com.fhtpay.transaction.model.SettleTypeInfo">
+		select * from gw_settle_type_info where enabled=1
+	</select>
+	<select id="queryTradeNosForTN" resultType="string">
+		select tradeNo from gw_trans_info 
+		where 
+			transDate &lt;= DATE_SUB(CURDATE(),INTERVAL #{info.settleCycle}-1 DAY)
+			and 
+			merNo=#{info.merNo}
+			and 
+			terNo=#{info.terNo}
+			and 
+			respCode='00'
+			and 
+			isChecked=1
+			and 
+			batchNo is null
+			and 
+			access=1
+			and 
+			tradeNo like 'BR%'
+		union 
+		SELECT DISTINCT t.tradeNo FROM (
+				SELECT tradeNo,SUM(transMoney) transMoney FROM gw_trans_info_log
+				WHERE 
+				STATUS=2
+				AND 
+				(transType='refund'
+				OR transType='dishonor')
+				GROUP BY tradeNo 
+			) AS t LEFT JOIN gw_trans_info b ON t.tradeNo=b.tradeNo 
+		WHERE 
+			 t.transMoney=b.merTransAmount
+		 	and 	
+			merNo=#{info.merNo}
+			and 
+			terNo=#{info.terNo}
+			AND 
+			b.respCode='00'
+			AND 
+			b.isChecked=1
+			AND 
+			b.batchNo IS NULL
+			AND 
+			b.access=1
+			AND 
+			b.tradeNo LIKE 'BR%'
+				
+	</select>
+	<select id="queryCanSettleTradeNosBySigned" resultType="string">
+	select a.tradeNo from gw_trans_info a left join gw_GoodsPress b on a.tradeNo=b.tradeNo
+		where 
+			
+			a.merNo=#{info.merNo}
+			and 
+			a.terNo=#{info.terNo}
+			and 
+			a.respCode='00'
+			and 
+			a.isChecked=1
+			and 
+			a.batchNo is null
+			and 
+			a.access=1
+			and 
+			(b.operationStatus=1 and a.transDate &lt;= DATE_SUB(CURDATE(),INTERVAL #{info.settleCycle}-1 DAY))
+			and 
+			a.tradeNo like 'BR%'
+		union 
+		SELECT DISTINCT t.tradeNo FROM (
+				SELECT tradeNo,SUM(transMoney) transMoney FROM gw_trans_info_log
+				WHERE 
+				STATUS=2
+				AND 
+				(transType='refund'
+				OR transType='dishonor')
+				GROUP BY tradeNo 
+			) AS t LEFT JOIN gw_trans_info b ON t.tradeNo=b.tradeNo 
+		WHERE 
+			 t.transMoney=b.merTransAmount
+		 	and 	
+			merNo=#{info.merNo}
+			and 
+			terNo=#{info.terNo}
+			AND 
+			b.respCode='00'
+			AND 
+			b.isChecked=1
+			AND 
+			b.batchNo IS NULL
+			AND 
+			b.access=1
+			AND 
+			b.tradeNo LIKE 'BR%'
+	</select>
+	<select id="queryCanSettleTradeNosBySendGoods" resultType="string">
+	select a.tradeNo from gw_trans_info a left join gw_GoodsPress b on a.tradeNo=b.tradeNo
+		where 
+			
+			a.merNo=#{info.merNo}
+			and 
+			a.terNo=#{info.terNo}
+			and 
+			a.respCode='00'
+			and 
+			a.isChecked=1
+			and 
+			a.batchNo is null
+			and 
+			a.access=1
+			and 
+			(b.status=1 and a.transDate &lt;= DATE_SUB(CURDATE(),INTERVAL #{info.settleCycle}-1 DAY))
+			and 
+			a.tradeNo like 'BR%'
+		union 
+		SELECT DISTINCT t.tradeNo FROM (
+				SELECT tradeNo,SUM(transMoney) transMoney FROM gw_trans_info_log
+				WHERE 
+				STATUS=2
+				AND 
+				(transType='refund'
+				OR transType='dishonor')
+				GROUP BY tradeNo 
+			) AS t LEFT JOIN gw_trans_info b ON t.tradeNo=b.tradeNo 
+		WHERE 
+			 t.transMoney=b.merTransAmount
+		 	and 	
+			merNo=#{info.merNo}
+			and 
+			terNo=#{info.terNo}
+			AND 
+			b.respCode='00'
+			AND 
+			b.isChecked=1
+			AND 
+			b.batchNo IS NULL
+			AND 
+			b.access=1
+			AND 
+			b.tradeNo LIKE 'BR%'
+	</select>
+	<select id="queryMerchantAccountCash" resultType="com.fhtpay.transaction.model.MerchantAccountAccess">
+		select
+			merNo,
+			terNo,
+		 	accountID,
+		 	currency,
+		 	sum(cashAmount) as cashAmount
+		 	from
+				(select 
+					a.merNo,
+					a.terNo,
+					a.id as accountID,
+					a.currency,
+					b.merSettleAmount-b.merForAmount-b.bondAmount-b.singleFee as cashAmount
+				from 
+					gw_merchant_account a right join gw_trans_info b on a.merNo=b.merNo and a.terNo=b.terNo
+				where 
+					b.tradeNo in
+					<foreach collection="list" item="tradeNo" index="index" open="(" close=")" separator=",">
+						#{tradeNo}
+					</foreach>
+				) as t
+		group by 
+			accountID,
+			 currency 
+		
+	</select>
+	<update id="updateTransBatchNo">
+		update 
+			gw_trans_info 
+		set 
+			batchNo=#{batchNo}
+		where 
+			tradeNo in
+			<foreach collection="list" item="tradeNo" index="index" open="(" close=")" separator=",">
+				#{tradeNo}
+			</foreach>
+	</update>
+	<select id="queryCanSettleBondTradeNos" resultType="string">
+		select tradeNo from gw_trans_info 
+		where 
+			transDate &lt;= DATE_SUB(CURDATE(),INTERVAL #{info.bondCycle}-1 DAY)
+			and 
+			merNo=#{info.merNo}
+			and 
+			terNo=#{info.terNo}
+			and 
+			respCode='00'
+			and 
+			isChecked=1
+			and 
+			batchNo is not null
+			and 
+			access=1
+			and 
+			bondBatchNo is null
+			and 
+			tradeNo like 'BR%'
+	</select>
+	<select id="queryMerchantAccountBondCash" resultType="com.fhtpay.transaction.model.MerchantAccountAccess">
+		select
+			merNo,
+			terNo,
+		 	accountID,
+		 	currency,
+		 	sum(bondAmount) as bondCashAmount
+		 	from
+				(select 
+					a.merNo,
+					a.terNo,
+					a.id as accountID,
+					a.currency,
+					b.bondAmount as bondAmount
+				from 
+					gw_merchant_account a right join gw_trans_info b on a.merNo=b.merNo and a.terNo=b.terNo
+				where 
+					b.tradeNo in
+					<foreach collection="list" item="tradeNo" index="index" open="(" close=")" separator=",">
+						#{tradeNo}
+					</foreach>
+				) as t
+		group by 
+			accountID,
+			 currency 
+	</select>
+	<update id="updateTransBondBatchNo">
+		update 
+			gw_trans_info 
+		set 
+			bondBatchNo=#{bondBatchNo}
+		where 
+			tradeNo in
+			<foreach collection="list" item="tradeNo" index="index" open="(" close=")" separator=",">
+				#{tradeNo}
+			</foreach>
+	</update>
+	<insert id="insertBankSourceInfo"  parameterType="String" >
+		insert into gw_bank_source_currencyCode_info (
+			param1,
+			param2,
+			param3,
+			param4,
+			param5,
+			param6,
+			param7,
+			createDate
+		)values(
+			<foreach collection="list" item="param" index="index"  separator=",">
+				#{param}
+			</foreach>
+			,now()
+		)
+	</insert>
+	<delete id="deleteBankSourceRateInfo">
+		delete from gw_bank_source_currencyCode_info
+	</delete>
+	<select id="queryBankSourceRateInfo" resultType="com.fhtpay.transaction.model.BankSourceInfo">
+		select * from gw_bank_source_currencyCode_info
+	</select>
+	<insert id="insertBankSourceRateInfo">
+		insert into gw_bank_currencyCode_rate(
+			sourceCurrencyCode,
+			targetCurrencyCode,
+			rateType,
+			rate,
+			bcDate,
+			createDate,
+			status
+		)values(
+			#{info.sourceCurrencyCode},
+			#{info.targetCurrencyCode},
+			#{info.rateType},
+			#{info.rate},
+			#{info.bcDate},
+			now(),
+			#{info.status}
+		)
+	</insert>
+	<select id="countExistsRate" resultType="int">
+		select count(*) from gw_bank_currencyCode_rate 
+		where 
+			sourceCurrencyCode=#{info.sourceCurrencyCode} and
+			targetCurrencyCode=#{info.targetCurrencyCode} and
+			rateType=#{info.rateType}
+	</select>
+	<update id="updateBankSourceRateInfo">
+		update gw_bank_currencyCode_rate set 
+			rate=#{info.rate},
+			bcDate=#{info.bcDate},
+			createDate=now()
+		where 
+			sourceCurrencyCode=#{info.sourceCurrencyCode} and 
+			targetCurrencyCode=#{info.targetCurrencyCode} and 
+			rateType=#{info.rateType}
+	</update>
+	<insert id="insertBankSourceRateInfoLog">
+		 insert into gw_bank_currencyCode_rate_log (logId,sourceCurrencyCode,targetCurrencyCode,rateType,rate,bcDate,createDate)
+  		 select id,sourceCurrencyCode,targetCurrencyCode,rateType,rate,bcDate,createDate from gw_bank_currencyCode_rate
+	</insert>
+	<select id="queryEmailSendInfo" resultType="com.fhtpay.transaction.model.EmailSendInfo">
+		select a.*,b.sendType,b.sendService,b.emailSubject from gw_email_send_info a left join gw_email_send_type_info b on a.sendTypeId=b.id where status=0 and (tradeNo is not null or merNo is not null)  order by id asc limit 20
+	</select>
+	<update id="updateEmailSendInfo">
+		update 
+			gw_email_send_info
+		set 
+			status=#{status},
+			terNo=#{terNo},
+			sendDate=now()
+		where 
+			id=#{id}
+	</update>
+	<select id="queryEmailInfo" resultType="com.fhtpay.email.model.EmailInfo">
+		select * from gw_email_info 
+		where 
+		enabled=1 and emailType=1 and sendCount &lt;sendCountLimit
+		order by sendCount
+		limit 1
+	</select>
+	<select id="queryTradeRocordByTradeNo" resultType="com.fhtpay.email.model.GwTradeRecord">
+		SELECT 
+			a.merNo,
+			a.terNo,
+			a.tradeNo,
+			a.orderNo,
+			a.email AS cardHoldEmail,
+			a.currencyId,
+			b.email AS merchantEmail,
+			a.merBusCurrency AS currency,
+			a.mertransAmount AS amount,
+			a.payWebSite,
+			a.transDate,
+			f.tel,
+			f.fax,
+			f.website,
+			f.helpWebsite,
+			f.replyEmail,
+			g.Iogistics,
+			g.trackNo,
+			g.UploadTime,
+			i.IogisticsUrl,
+			a.acquirer,
+			(select refundAmount from gw_refund_info where tradeNo=#{tradeNo} order by refundDate DESC limit 1)as refundAmount
+		FROM 
+			gw_trans_info a 
+			LEFT JOIN gw_merchant_info b ON a.merNo=b.merNo
+			LEFT JOIN gw_GoodsPress g on g.tradeNo = a.tradeNo
+			LEFT JOIN gw_currency_info cu on cu.id = a.currencyId
+			LEFT JOIN gw_iogistics_info i on g.Iogistics = i.Iogistics
+			LEFT JOIN gw_email_send_info d ON a.tradeNo=d.tradeNo 
+			LEFT JOIN gw_email_send_type_info e ON d.sendTypeId=e.id
+			LEFT JOIN gw_email_sub_info f ON e.emailSubId=f.id
+		WHERE 
+			a.tradeNO=#{tradeNo}
+			AND e.id=#{sendTypeId}
+			AND d.status=0 
+		limit 1
+	</select>
+	<update id="updateEmailSendCountById">
+		update gw_email_info set sendCount=sendCount+1 where id=#{id}	
+	</update>
+	<update id="updateEmailCount">
+		update gw_email_info set sendCount=0 where 1=1
+	</update>
+	
+	<select id="queryMerEmailConfigByMerNoAndTerNo" resultType="com.fhtpay.transaction.model.MerchantEmailConfigInfo">
+		select * from gw_merchant_email_info where merNo = #{merNo} and terNo = #{terNo} and emailSendType = #{emailSendType}
+	</select>
+	
+	<select id="queryComplaintTransByTradeNoAndComplainType" resultType="com.fhtpay.transaction.model.Complaint">
+		select 
+			c.id,
+			c.tradeNo,
+			c.complaintType,
+			c.deadline,
+			c.status,
+			c.remark,
+			c.complaintDate,
+			c.complaintLevel,
+			c.createdBy,
+			c.createdDate,
+			c.lastUpdateBy,
+			c.lastUpdateDate,
+			c.filePath,
+			c.CPDDate,
+			i.cValue complaintTypeValue,
+			t.orderNo,
+			t.payWebSite,
+			t.merBusCurrency,
+			t.merTransAmount,
+			t.merNo,
+			(select type from gw_merchant_info where gw_merchant_info.merNo=t.merNo) as merchantType
+		from gw_trans_complaint_info c 
+		left join gw_trans_complaint_type_info i on i.id=c.complaintType
+		left join gw_trans_info t on t.tradeNo=c.tradeNo
+		LEFT JOIN gw_currency_info d ON t.currencyId = d.id
+		where t.tradeNo = #{tradeNo} and c.type = #{complaintType} limit 1
+	</select>
+	<select id="queryMerchantTerInfoByMerNoAndTerNo" resultType="com.fhtpay.transaction.model.MerchantTerInfo">
+		select * from gw_merchant_terno_info where merNo = #{merNo} and terNo = #{terNo}
+	</select>
+	<select id="queryExchangRateInfo" resultType="com.fhtpay.transaction.model.ExchangeRateInfo">
+		SELECT id,sourceCurrency,targetCurrency,rate,rateType FROM gw_exchang_rate_info 
+		where rateType!='0'
+	</select>
+	<select id="queryBankRate" resultType="decimal">
+		<choose>
+		<when test="info.targetCurrency=='CNY'">
+			SELECT rate from gw_bank_currencyCode_rate where 
+			rateType=#{info.rateType} 
+			and sourceCurrencyCode=#{info.sourceCurrency} 
+			and targetCurrencyCode = #{info.targetCurrency} 
+		</when>
+		<otherwise>
+		select 
+			(SELECT rate from gw_bank_currencyCode_rate where 
+			rateType=#{info.rateType} 
+			and sourceCurrencyCode=#{info.sourceCurrency} 
+			and targetCurrencyCode = 'CNY')
+			/
+			(SELECT rate from gw_bank_currencyCode_rate where 
+			rateType=#{info.rateType} 
+			and sourceCurrencyCode=#{info.targetCurrency} 
+			and targetCurrencyCode = 'CNY')
+		</otherwise>
+	</choose>
+	</select>
+	<select id="queryBankRateCNY" resultType="decimal">
+			SELECT 1/rate from gw_bank_currencyCode_rate where 
+			rateType=#{info.rateType} 
+			and targetCurrencyCode=#{info.sourceCurrency} 
+			and sourceCurrencyCode = #{info.targetCurrency} 
+	</select>
+	
+	<update id="updateExceptionExchagRateInfo">
+		update gw_exchang_rate_info set exceptionType=1 where id=#{info.id}
+	</update>
+	
+	<update id="updateExchagRateInfo">
+		update gw_exchang_rate_info set rate=#{info.rate},updateDate=now(),updateBy='SYS',exceptionType=0 where id=#{info.id}
+	</update>
+	<!-- 获取没有标记的日期 	 duplicateFlag重复标示: 0 待标示 1 重复 2 不重复 -->
+	<select id="queryNoFlagDate" resultType="com.fhtpay.transaction.model.DuplicateTransCount">
+			SELECT DISTINCT DATE_FORMAT(transDate,'%Y-%m-%d')AS doDate FROM gw_trans_info WHERE respMsg NOT LIKE '%high risk%' and transType='sales' AND  duplicateFlag=0 and respCode in('00','01') ORDER BY  DATE_FORMAT(transDate,'%Y-%m-%d') DESC
+	</select>
+	
+	<!-- 查询没有标记的订单号 -->
+	<select id="queryNoFlagTradeNos" resultType="string">
+		select tradeNo from gw_trans_info where transDate>='${doDate} 00:00:00' and transDate&lt;='${doDate} 23:59:59' and respMsg not like '%high risk%' and transType='sales' and respCode in('00','01')  AND  duplicateFlag=0 order by transDate 
+	</select>
+	
+	<select id="queryDuplicateTransCount" resultType="com.fhtpay.transaction.model.DuplicateTransCount">
+		SELECT 
+		SUM(CASE WHEN respCode='00' THEN 1 ELSE 0 END) successDuplicate,
+		SUM(CASE WHEN respCode='01' THEN 1 ELSE 0 END) failDuplicate,
+		(SELECT respCode FROM gw_trans_info WHERE tradeNo=#{tradeNo}) respCode
+		FROM gw_trans_info  
+		WHERE 
+		transDate>='${doDate} 00:00:00' AND transDate&lt;=(SELECT transDate FROM gw_trans_info WHERE tradeNo=#{tradeNo})
+		AND respMsg NOT LIKE '%high risk%'
+		and transType='sales'
+		AND (ipAddress=(SELECT ipAddress FROM gw_trans_info WHERE tradeNo=#{tradeNo})
+		OR checkToNo=(SELECT checkToNo FROM gw_trans_info WHERE tradeNo=#{tradeNo})
+		OR email=(SELECT email FROM gw_trans_info WHERE tradeNo=#{tradeNo}))
+		and merNo=(select merNo from gw_trans_info where  tradeNo=#{tradeNo})
+		and terNo=(select terNo from gw_trans_info where  tradeNo=#{tradeNo})
+		AND tradeNo &lt;>#{tradeNo}
+		ORDER BY transDate
+	
+	</select>
+	<update id="updateTransInfoDupplicateFlag">
+		update gw_trans_info set duplicateFlag=#{i} where tradeNo=#{tradeNo}
+	</update>
+	<select id="queryBeforeFailTransInfoDuplicateFlag" resultType="string">
+			select tradeNo
+			FROM gw_trans_info  
+			WHERE 
+				transDate>='${doDate} 00:00:00' AND transDate&lt;=(SELECT transDate FROM gw_trans_info WHERE tradeNo=#{tradeNo})
+				AND respMsg NOT LIKE '%high risk%'
+				and respCode='01'
+				and transType='sales'
+				and duplicateFlag=2
+				AND (ipAddress=(SELECT ipAddress FROM gw_trans_info WHERE tradeNo=#{tradeNo})
+				OR checkToNo=(SELECT checkToNo FROM gw_trans_info WHERE tradeNo=#{tradeNo})
+				OR email=(SELECT email FROM gw_trans_info WHERE tradeNo=#{tradeNo}))
+				and merNo=(select merNo from gw_trans_info where  tradeNo=#{tradeNo})
+				and terNo=(select terNo from gw_trans_info where  tradeNo=#{tradeNo})
+				AND tradeNo &lt;>#{tradeNo}
+	</select>
+	<select id="queryExceptionSettleInfoForTransFail" resultType="com.fhtpay.transaction.model.ExceptionSettleInfo">
+		SELECT * FROM gw_exception_settle_type WHERE gatherType=5 AND enabled=1 order by merNo desc ,terNo
+	</select>
+	<select id="queryConfirmTransFailOrder" resultType="string">
+		select 
+			tradeNo 
+		from 
+			gw_trans_info 
+		where 
+			merNo=#{merNo} 
+		and 
+			terNo=#{terNo} 
+		and 
+			transType='sales'
+		and 
+			transDate &lt;=CURDATE()
+		and 
+			transDate>=DATE_ADD(CURDATE(),INTERVAL -1 DAY)
+		and 
+			respCode='01'
+		and 
+			respMsg not like '%high risk%'
+	</select>
+	
+	<select id="getShaKeyByMerNoAndTerNo" resultType="string">
+		select shaKey from gw_merchant_terno_info where merNo=#{merNo} and terNo=#{terNo}
+	</select>
+	<select id="queryMustBackTradeNos" resultType="com.fhtpay.transaction.model.PaymentInfo">
+		SELECT 
+			a.tradeNo,
+			a.backFlag,
+			b.returnURL,
+			a.merBusCurrency AS currencyCode,
+			a.merTransAmount AS amount,
+			a.merNo,
+			a.terNo,
+			a.orderNo,
+			a.respCode,
+			a.respMsg,
+			a.transType,
+			a.acquirer
+		FROM 
+			gw_trans_info a LEFT JOIN gw_Trade_order_record b ON a.tradeNo=b.tradeNo
+		WHERE 
+		a.transDate>=DATE_ADD(NOW(),INTERVAL -10 MINUTE)
+		and
+			a.transType in ('sales','test')
+		AND 
+			a.backFlag=0
+		AND 
+			a.respMsg !='pending'
+		<!--  AND
+			a.respMsg != 'high risk pending!'-->
+		AND 
+		( 
+			( a.merNo  = 91888 and a.terNo=88856 )  
+			or 
+			a.merNo=111888
+		)			
+	</select>
+	
+	<update id="updateMustBackTradeNoFlag">
+			UPDATE
+				gw_trans_info
+			SET
+				backFlag=1
+			WHERE
+				tradeNo in 
+		<foreach collection="list" item="vo" separator="," open="(" close=")">
+			#{vo.tradeNo}
+		</foreach>
+	</update>
+	
+	
+	<select id="queryMerchantRiskTransInfo" resultType="com.fhtpay.task.model.email.RiskTransInfo">
+		select 
+			a.id,
+			a.tradeNo,
+			b.merNo,
+			b.payWebSite as website,
+			a.createDate as doDate,
+			a.status as doStatus,
+			b.orderNo,
+			b.terNo,
+			(case a.ruleId when -1 then a.riskMsg else c.ruleName end) as doReason,
+			b.respCode,
+			a.ruleId,
+			b.respMsg,
+			e.email,
+			e.merchantName,
+			b.transDate,
+			b.merTransAmount,
+			b.merBusCurrency
+		from 
+			gw_risk_trans_info a 
+			left join gw_trans_info b on a.tradeNo=b.tradeNo
+			left join rule_info c on a.ruleId=c.ruleId
+			left join gw_merchant_info e on e.merNo=b.merNo
+		where
+			a.tradeNo=#{tradeNo}
+		and
+			a.status='review'
+		and
+			e.enabled=1
+			limit 1
+	</select>
+	
+	<!-- 可疑订单 -->
+	
+	<!-- 查找不符合规则交易信息(x天不超过X笔) -->
+	
+	<select id="querySuspiciousLtTransInfoByMerNoAndTerNo" resultType="com.fhtpay.task.model.suspicious.SuspiciousTransDeatailInfo">
+		<if test="vo.tableName == 'IPLimit'">
+			SELECT 
+				a.IPAddress AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM 
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND 
+				a.transType='sales'
+			AND
+				a.IPAddress IS NOT NULL
+			AND
+				a.IPAddress!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY 
+				a.IPAddress
+			HAVING 
+				COUNT(a.IPAddress)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'cardNoLimit'">
+			SELECT 
+				a.checkToNo AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM 
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND 
+				a.transType='sales'
+			AND
+				a.checkToNo IS NOT NULL
+			AND
+				a.checkToNo!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY 
+				a.checkToNo
+			HAVING 
+				COUNT(a.checkToNo)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'emailLimit'">
+			SELECT
+				a.email AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.email IS NOT NULL
+			AND
+				a.email!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY
+				a.email
+			HAVING
+				COUNT(a.email)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'grAddressLimit'">
+			SELECT
+				b.grAddress AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				b.grAddress IS NOT NULL
+			AND
+				b.grAddress!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY
+				b.grAddress
+			HAVING
+				COUNT(b.grAddress)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'cradFullPhoneLimit'">
+			SELECT
+				b.cardFullPhone AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				b.cardFullPhone IS NOT NULL
+			AND
+				b.cardFullPhone!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY
+				b.cardFullPhone
+			HAVING
+				COUNT(b.cardFullPhone)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'cardFullNameLimit'">
+			SELECT
+				b.cardFullName AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				b.cardFullName IS NOT NULL
+			AND
+				b.cardFullName!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY
+				b.cardFullName
+			HAVING
+				COUNT(b.cardFullName)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountLimit'">
+			SELECT
+				a.merSettleAmount AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.merTransAmount IS NOT NULL
+			AND
+				a.merTransAmount!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY
+				a.merTransAmount
+			HAVING
+				a.merSettleAmount>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountCardNoLimit'">
+			SELECT
+				a.checkToNo AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.checkToNo IS NOT NULL
+			AND
+				a.checkToNo!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY
+				a.checkToNo
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountEmailLimit'">
+			SELECT
+				a.email AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.email IS NOT NULL
+			AND
+				a.email!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY
+				a.email
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountIpLimit'">
+			SELECT
+				a.IPAddress AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.IPAddress IS NOT NULL
+			AND
+				a.IPAddress!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY
+				a.IPAddress
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountCardFullPhoneLimit'">
+			SELECT 
+				b.cardFullPhone AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM 
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND 
+				a.transType='sales'
+			AND
+				b.cardFullPhone IS NOT NULL
+			AND
+				b.cardFullPhone!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			GROUP BY 
+				b.cardFullPhone
+			HAVING 
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountCardFullNameLimit'">
+			SELECT
+				b.cardFullName AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				b.cardFullName IS NOT NULL
+			AND
+				b.cardFullName!=''
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			GROUP BY
+				b.cardFullName
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountGrAddressLimit'">
+			SELECT
+				b.grAddress AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				b.grAddress IS NOT NULL
+			AND
+				b.grAddress!=''
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			AND
+				a.transType='sales'
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			GROUP BY
+				b.grAddress
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+	</select>
+	<select id="querySuspiciousLtTransInfoByMerNo" resultType="com.fhtpay.task.model.suspicious.SuspiciousTransDeatailInfo">
+		<if test="vo.tableName == 'IPLimit'">
+			SELECT
+				a.IPAddress AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.IPAddress IS NOT NULL
+			AND
+				a.IPAddress!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				a.IPAddress
+			HAVING
+				COUNT(a.IPAddress)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'cardNoLimit'">
+			SELECT
+				a.checkToNo AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.checkToNo IS NOT NULL
+			AND
+				a.checkToNo!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				a.checkToNo
+			HAVING
+				COUNT(a.checkToNo)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'emailLimit'">
+			SELECT
+				a.email AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.email IS NOT NULL
+			AND
+				a.email!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				a.email
+			HAVING
+				COUNT(a.email)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'grAddressLimit'">
+			SELECT
+				b.grAddress AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				b.grAddress IS NOT NULL
+			AND
+				b.grAddress!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				b.grAddress
+			HAVING
+				COUNT(b.grAddress)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'cradFullPhoneLimit'">
+			SELECT
+				b.cardFullPhone AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				b.cardFullPhone IS NOT NULL
+			AND
+				b.cardFullPhone!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				b.cardFullPhone
+			HAVING
+				COUNT(b.cardFullPhone)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'cardFullNameLimit'">
+			SELECT
+				b.cardFullName AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				b.cardFullName IS NOT NULL
+			AND
+				b.cardFullName!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				b.cardFullName
+			HAVING
+				COUNT(b.cardFullName)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountLimit'">
+			SELECT
+				a.merSettleAmount AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.merTransAmount IS NOT NULL
+			AND
+				a.merTransAmount!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				a.merTransAmount
+			HAVING
+				a.merSettleAmount>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountCardNoLimit'">
+			SELECT
+				a.checkToNo AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.checkToNo IS NOT NULL
+			AND
+				a.checkToNo!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				a.checkToNo
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountEmailLimit'">
+			SELECT
+				a.email AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.email IS NOT NULL
+			AND
+				a.email!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				a.email
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountIpLimit'">
+			SELECT
+				a.IPAddress AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				a.IPAddress IS NOT NULL
+			AND
+				a.IPAddress!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				a.IPAddress
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountCardFullPhoneLimit'">
+			SELECT
+				b.cardFullPhone AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				b.cardFullPhone IS NOT NULL
+			AND
+				b.cardFullPhone!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			GROUP BY
+				b.cardFullPhone
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountCardFullNameLimit'">
+			SELECT
+				b.cardFullName AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.transType='sales'
+			AND
+				b.cardFullName IS NOT NULL
+			AND
+				b.cardFullName!=''
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			GROUP BY
+				b.cardFullName
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+		<if test="vo.tableName == 'amountGrAddressLimit'">
+			SELECT
+				b.grAddress AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.transType='sales'
+			AND
+				b.grAddress IS NOT NULL
+			AND
+				b.grAddress!=''
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -#{vo.values.colKeyValue} DAY)
+			GROUP BY
+				b.grAddress
+			HAVING
+				SUM(a.merSettleAmount)>#{vo.values.colValue}
+		</if>
+	</select>
+	
+	<insert id="saveSuspiciousMerTransInfo" useGeneratedKeys="true" keyProperty="vo.Id">
+		INSERT INTO
+			gw_suspicious_mer_trans_info
+			(
+				ruleId,
+				merNo,
+				terNo,
+				susType,
+				createDate,
+				operatedDate
+			)
+		VALUES
+			(
+				#{vo.ruleId},
+				#{vo.merNo},
+				#{vo.terNo},
+				#{vo.susType},
+				curdate(),
+				now()
+			)
+	</insert>
+	
+	<!-- 保存订单信息 -->
+	<insert id="saveSuspiciousTransOrderInfo" useGeneratedKeys="true" keyProperty="vo.Id">
+		INSERT INTO
+			gw_suspicious_trans_order_info
+			(
+				tradeNo,
+				syspId,
+				info
+			)
+		VALUES
+			(
+				#{vo.tradeNo},
+				#{vo.syspId},
+				#{vo.info}
+			)
+	</insert>
+	
+	<select id="queryRuleInfoByMerNo" resultType="com.fhtpay.task.model.suspicious.RulesInfo">
+		SELECT
+			r.*
+		FROM
+			gw_suspicious_rule_profile_ref_ruleinfo rp
+			LEFT JOIN gw_suspicious_rule_info r ON rp.ruleId = r.ruleid
+		WHERE
+			rp.profileId IN (
+				SELECT
+					profileId
+				FROM
+					gw_suspicious_mer_ref_ruleprofie
+				WHERE
+					merNo = #{merNo}
+				AND 
+					status = 1 
+				ORDER BY 
+					merNo
+				DESC 
+			)
+		AND 
+			r.`status` = 1
+		GROUP BY
+			r.ruleId
+	</select>
+	
+	<select id="queryRuleInfoByMerNoAndTerNo" resultType="com.fhtpay.task.model.suspicious.RulesInfo">
+		SELECT
+			r.*
+		FROM
+			gw_suspicious_rule_profile_ref_ruleinfo rp
+			LEFT JOIN gw_suspicious_rule_info r ON rp.ruleId = r.ruleid
+		WHERE
+			rp.profileId = (
+				SELECT
+					profileId
+				FROM
+					gw_suspicious_mer_ref_ruleprofie
+				WHERE
+					merNo = #{merNo}
+				AND 
+					terNo=#{terNo}
+				AND 
+					status = 1 
+				ORDER BY 
+					merNo
+				DESC 
+			)
+		AND 
+			r.`status` = 1
+		GROUP BY
+			r.ruleId
+	</select>
+	
+	<select id="queryRuleInfoByTerNo" resultType="com.fhtpay.task.model.suspicious.RulesInfo">
+		SELECT
+			r.*
+		FROM
+			gw_suspicious_rule_profile_ref_ruleinfo rp
+			LEFT JOIN gw_suspicious_rule_info r ON rp.ruleId = r.ruleid
+		WHERE
+			rp.profileId IN (
+				SELECT
+					profileId
+				FROM
+					gw_suspicious_mer_ref_ruleprofie
+				WHERE
+					terNo=#{terNo}
+				AND 
+					status = 1 
+				ORDER BY 
+					merNo
+				DESC 
+			)
+		AND 
+			r.`status` = 1
+		GROUP BY
+			r.ruleId
+	</select>
+	
+	<!-- 根据参数ID查询参数信息 -->
+	<select id="queryParamInfoByParamId" resultType="com.fhtpay.task.model.suspicious.ParamInfo">
+		SELECT
+			* 
+		FROM 
+			gw_suspicious_rule_param
+		WHERE 
+			paramId = #{paramId}
+	</select>
+	
+	<!-- 查询参数详细信息列表 -->
+	<select id="queryParamValuesInfoByParamId" resultType="com.fhtpay.task.model.suspicious.ParamValueInfo">
+		SELECT 
+			* 
+		FROM 
+			gw_suspicious_rule_param_value 
+		WHERE 
+			paramId = #{paramId} 
+	</select>
+	
+	<!-- 查询参数列表的值 -->
+	<select id="queryParamListValuesByParamId" resultType="java.lang.String">
+		SELECT 
+			value 
+		FROM 
+			gw_suspicious_rule_param_value 
+		WHERE 
+			paramId = #{paramId} 
+	</select>
+	
+	<!-- 根据规则类型,键值查找值信息 -->
+	<select id="queryParamTableValues" resultType="java.util.HashMap">
+		SELECT 
+			colKey AS ${colKey},
+			colValue AS ${colValue} 
+		FROM 
+			gw_suspicious_base_table_info 
+		WHERE 
+			tableName = #{tableName}
+	</select>
+	
+	<!-- 根据处理类ID查询规则处理类 -->
+	<select id="queryRuleProcessClassByClassId" resultType="com.fhtpay.task.model.suspicious.RuleProcessClass">
+		SELECT 
+			* 
+		FROM 
+			gw_suspicious_rule_processClass 
+		WHERE 
+			processClassID = #{classId}
+	</select>
+	
+	<!-- 查找可疑订单规则信息 -->
+	<select id="querySuspiciousMerInfo" resultType="com.fhtpay.task.model.suspicious.SuspiciousMerInfo">
+		SELECT
+			merNo
+		FROM
+			gw_suspicious_mer_ref_ruleprofie
+		WHERE
+			status=1
+		GROUP BY
+			merNo
+		ORDER BY
+			merNo
+	</select>
+	
+	<select id="querySuspiciousMerTerInfo" resultType="com.fhtpay.task.model.suspicious.SuspiciousMerTerInfo">
+		SELECT
+			merNo,
+			terNo
+		FROM
+			gw_suspicious_mer_ref_ruleprofie
+		WHERE
+			status=1
+		ORDER BY
+			merNo,terNo
+	</select>
+	<select id="queryNeedChangeTransactionTradeNos" resultType="string">
+		select tradeNo from gw_trans_info 
+		where currencyId=16
+		and transType='sales'
+		and transDate&lt;=DATE_ADD(NOW(),INTERVAL -10 MINUTE)
+		and transDate>=DATE_ADD(NOW(),INTERVAL -3 DAY)
+		and respMsg='pending'
+		and relNo is null
+		AND cardType NOT IN('visa','master')
+	</select>
+	
+	<!-- 交易预警信息 -->
+	<select id="queryTransWarnInfo" resultType="com.fhtpay.task.model.warn.TransWarnInfo">
+		SELECT
+			a.id,
+			a.merNo,
+			a.bankId,
+			a.type,
+			a.activeTime,
+			a.emails,
+			a.time,
+			a.respMsg,
+			a.cycle,
+			b.bankName
+		FROM
+			gw_trans_warning_info a
+			LEFT JOIN gw_bank_info b ON b.id=a.bankId
+	</select>
+	
+	<select id="queryBankCurrencyInfo" resultType="com.fhtpay.task.model.warn.BankCurrencyInfo">
+		SELECT
+			id,
+			currencyName
+		FROM
+			gw_currency_info
+		WHERE
+			bankId=#{bankId}
+		AND
+			enabled=1
+	</select>
+	
+	<select id="queryRespMsgTransInfo" resultType="java.lang.Integer">
+			SELECT
+		  		COUNT(a.id)
+			FROM
+				gw_trans_info a
+				LEFT JOIN gw_currency_info b ON b.id=a.currencyId
+			WHERE
+				b.enabled=1
+				<if test="vo.bankId!=null and vo.bankId!=''">
+					AND
+						b.bankId=#{vo.bankId}
+				</if>
+				<if test="vo.merNo!=null and vo.merNo!=''">
+					AND
+						a.merNo=#{vo.merNo}
+				</if>
+			AND
+				a.respMsg=#{vo.respMsg}
+			AND
+					<!-- 
+					<![CDATA[DATE_SUB(NOW(), INTERVAL #{vo.activeTime} MINUTE)<=transDate<=DATE_ADD(NOW(), INTERVAL #{vo.activeTime} MINUTE)]]>
+					 -->
+				<![CDATA[(UNIX_TIMESTAMP(DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i'))/60-#{vo.activeTime})<=(UNIX_TIMESTAMP(DATE_FORMAT(a.transDate, '%Y-%m-%d %H:%i'))/60)]]>
+	</select>
+	
+	<select id="queryFailedTransInfo" resultType="java.lang.String">
+		SELECT
+		  	a.id
+		FROM
+			gw_trans_info a
+			LEFT JOIN gw_currency_info b ON b.id=a.currencyId
+		WHERE
+			b.enabled=1
+			<if test="vo.bankId!=null and vo.bankId!=''">
+				AND
+					b.bankId=#{vo.bankId}
+			</if>
+			<if test="vo.merNo!=null and vo.merNo!=''">
+				AND
+					a.merNo=#{vo.merNo}
+			</if>
+		AND
+			a.respCode!='00'
+		AND
+			a.respMsg NOT LIKE '%high risk%'
+		AND
+			<!-- 
+			<![CDATA[DATE_SUB(NOW(), INTERVAL #{vo.activeTime} MINUTE)<=transDate<=DATE_ADD(NOW(), INTERVAL #{vo.activeTime} MINUTE)]]>
+			 -->
+			<![CDATA[(UNIX_TIMESTAMP(DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i'))/60-#{vo.activeTime})<=(UNIX_TIMESTAMP(DATE_FORMAT(a.transDate, '%Y-%m-%d %H:%i'))/60)]]>
+		ORDER BY
+			a.id
+		DESC
+		LIMIT
+			1
+	</select>
+	
+	<select id="queryFaildTransRespCodeInfo" resultType="java.lang.String">
+		SELECT
+		  	a.respCode
+		FROM
+			gw_trans_info a
+			LEFT JOIN gw_currency_info b ON b.id=a.currencyId
+		WHERE
+			b.enabled=1
+			<if test="vo.bankId!=null and vo.bankId!=''">
+				AND
+					b.bankId=#{vo.bankId}
+			</if>
+			<if test="vo.merNo!=null and vo.merNo!=''">
+				AND
+					a.merNo=#{vo.merNo}
+			</if>
+		AND
+			a.respMsg NOT LIKE '%high risk%'
+		AND
+			<![CDATA[a.id<#{transId}]]>
+		AND
+			<!-- 
+			<![CDATA[DATE_SUB(NOW(), INTERVAL #{vo.activeTime} MINUTE)<=transDate<=DATE_ADD(NOW(), INTERVAL #{vo.activeTime} MINUTE)]]>
+			 -->
+			<![CDATA[(UNIX_TIMESTAMP(DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i'))/60-#{vo.activeTime})<=(UNIX_TIMESTAMP(DATE_FORMAT(a.transDate, '%Y-%m-%d %H:%i'))/60)]]>
+		ORDER BY
+			a.id
+		DESC
+		LIMIT
+			#{limit}
+	</select>
+	
+	<select id="queryNoTransInfo" resultType="java.lang.Integer">
+		SELECT
+		  	COUNT(a.id)
+		FROM
+			gw_trans_info a
+			LEFT JOIN gw_currency_info b ON b.id=a.currencyId
+		WHERE
+			b.enabled=1
+			<if test="vo.bankId!=null and vo.bankId!=''">
+				AND
+					b.bankId=#{vo.bankId}
+			</if>
+			<if test="vo.merNo!=null and vo.merNo!=''">
+				AND
+					a.merNo=#{vo.merNo}
+			</if>
+		AND
+			<!-- 
+			<![CDATA[DATE_SUB(NOW(), INTERVAL #{vo.activeTime} MINUTE)<=transDate<=DATE_ADD(NOW(), INTERVAL #{vo.activeTime} MINUTE)]]>
+			 -->
+			<![CDATA[(UNIX_TIMESTAMP(DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i'))/60-#{vo.activeTime})<=(UNIX_TIMESTAMP(DATE_FORMAT(a.transDate, '%Y-%m-%d %H:%i'))/60)]]>
+	</select>
+	
+	<select id="queryRiskTransInfo" resultType="java.lang.Integer">
+		SELECT
+		  	COUNT(a.id)
+		FROM
+			gw_trans_info a
+			LEFT JOIN gw_currency_info b ON b.id=a.currencyId
+		WHERE
+			b.enabled=1
+			<if test="vo.bankId!=null and vo.bankId!=''">
+				AND
+					b.bankId=#{vo.bankId}
+			</if>
+			<if test="vo.merNo!=null and vo.merNo!=''">
+				AND
+					a.merNo=#{vo.merNo}
+			</if>
+		AND
+			a.respMsg LIKE '%high risk%'
+		AND
+			<!-- 
+			<![CDATA[DATE_SUB(NOW(), INTERVAL #{vo.activeTime} MINUTE)<=transDate<=DATE_ADD(NOW(), INTERVAL #{vo.activeTime} MINUTE)]]>
+			 -->
+			<![CDATA[(UNIX_TIMESTAMP(DATE_FORMAT(NOW(), '%Y-%m-%d %H:%i'))/60-#{vo.activeTime})<=(UNIX_TIMESTAMP(DATE_FORMAT(a.transDate, '%Y-%m-%d %H:%i'))/60)]]>
+	</select>
+	
+	<select id="queryTransWarnPhoneInfo" resultType="com.fhtpay.task.model.warn.TransWarnPhoneInfo">
+		SELECT
+			GROUP_CONCAT(a.phoneNo) AS phoneNo,
+			GROUP_CONCAT(a.email) AS email
+		FROM
+			gw_trans_warn_phone_info a
+			LEFT JOIN gw_trans_warn_rel_phone b ON b.phoneId=a.id
+		WHERE
+			b.warnId=#{warnId}
+		GROUP BY
+			b.warnId
+	</select>
+	
+	<select id="queryTransWarnEmailInfo" resultType="com.fhtpay.task.model.warn.TransWarnEmailInfo">
+		SELECT
+			a.id,
+			a.phoneNo,
+			a.email,
+			a.systemId,
+			a.userName,
+			b.warnId,
+			a.createDate
+		FROM
+			gw_trans_warn_phone_info a
+			LEFT JOIN gw_trans_warn_rel_phone b ON b.phoneId=a.id
+		WHERE
+			b.warnId=#{vo.id}
+	</select>
+	
+	<select id="queryTransWarnMessageInfoByWarnId" resultType="com.fhtpay.task.model.warn.TransWarnMessagInfo">
+		SELECT
+			id,
+			systemId,
+			warnId,
+			message
+		FROM
+			gw_trans_warn_message_info
+		WHERE
+			warnId=#{warnId}
+		LIMIT
+			1
+	</select>
+	<!-- 查询结算条件中收取拒付罚金的商户-->
+	<select id="queryExceptionSettleInfoForDisFine" resultType="com.fhtpay.transaction.model.ExceptionSettleInfo">
+		SELECT * FROM gw_exception_settle_type WHERE gatherType=2 AND enabled=1 order by merNo desc ,terNo
+	</select>
+	
+	<!-- 查询结算条件中需要收取拒付预警费的商户 -->
+	<select id="queryExceptionSettleInfoForDisWarning" resultType="com.fhtpay.transaction.model.ExceptionSettleInfo">
+		SELECT * FROM gw_exception_settle_type WHERE gatherType=6 AND enabled=1 order by merNo desc ,terNo
+	</select>
+	
+	<!-- 查询收取拒付预警费的商户的定制费用  优先级依次选择卡种定制、银行定制、所有-->
+	<!-- 收取条件gatherType= 1拒付处理费 2拒付罚金 3退款处理费 4退款交易手续费 5失败订单处理费 6 拒付预警费 -->
+	<select id="queryAmountInfoForDisWarning" resultType="com.fhtpay.transaction.model.ExceptionSettleInfo">
+		SELECT *
+		FROM gw_exception_settle_type a
+		WHERE gatherType = 6
+		    AND enabled = 1
+		    AND (merNo = #{merNo}
+		          OR merNo = '0')
+		    AND (terNo = #{terNo}
+		          OR terNo = '0')
+		    AND (bankId = (SELECT
+		                     bankId
+		                   FROM gw_currency_info
+		                   WHERE id = #{currencyId})
+		          OR bankId = '0')
+		    AND (cardType = #{cardType}
+		          OR cardType = '' OR cardType IS NULL)
+		ORDER BY merNo DESC,terNo DESC,bankId DESC, cardType DESC
+		LIMIT 1
+	</select>
+	
+	<!-- 查询商户拒付率 -->
+	<!-- 【type 	0,调查单，1拒付；2持卡人投诉】【isMerchantSee商户是否可见】-->
+	<select id="queryMerchantDisRateByMerNoAndTerNo" resultType="com.fhtpay.transaction.model.DisFineCount">
+	select  IFNULL(
+		(select count(*) from gw_trans_complaint_info  a LEFT JOIN gw_trans_info b ON a.tradeNo=b.tradeNo 
+		where 
+			b.merNo=#{merNo}
+		and 
+			b.terNo=#{terNo}
+		and 
+			a.type='1'
+		and
+			a.isMerchantSee=0
+		and 
+			a.complaintDate>=DATE_SUB(DATE_SUB(CURDATE(),INTERVAL EXTRACT(DAY FROM NOW())-1 DAY),INTERVAL 1 MONTH)
+		and 
+			a.complaintDate&lt;DATE_SUB(DATE_SUB(CURDATE(),INTERVAL EXTRACT(DAY FROM NOW())-1 DAY),INTERVAL 0 MONTH)
+		),0) as disCount,
+		ifnull((
+		select count(*) from gw_trans_info 
+		where 
+			merNo=#{merNo}
+		and 
+			terNo=#{terNo}
+		and 
+			respCode='00'
+		and 
+			transType='sales'
+		and 
+			transDate>=DATE_SUB(DATE_SUB(CURDATE(),INTERVAL EXTRACT(DAY FROM NOW())-1 DAY),INTERVAL 1 MONTH)
+		and 
+			transDate&lt;=DATE_SUB(DATE_SUB(CURDATE(),INTERVAL EXTRACT(DAY FROM NOW())-1 DAY),INTERVAL 0 MONTH)
+		)
+		,0) as successCount
+	</select>
+	
+	<!-- 根据商户号终端号查询商户账户表 -->
+	<select id="queryMerchantAccountForAccess" resultType="com.fhtpay.transaction.model.MerchantAccountAccess">
+		select
+			merNo,
+			terNo,
+		 	id as accountID,
+		 	currency
+		 	from
+		 		gw_merchant_account 
+		 	where 
+		 		merNo=#{merNo}
+		 	and 
+		 		terNo=#{terNo}
+	</select>
+	
+	<select id="queryConfirmTransDisFineOrder" resultType="string">
+		select a.tradeNo from gw_trans_complaint_info  a LEFT JOIN gw_trans_info b ON a.tradeNo=b.tradeNo 
+		where 
+			b.merNo=#{merNo}
+		and 
+			b.terNo=#{terNo}
+		and 
+			a.type='1'
+		and
+			a.isMerchantSee=0
+		and 
+			a.complaintDate>=DATE_SUB(DATE_SUB(CURDATE(),INTERVAL EXTRACT(DAY FROM NOW())-1 DAY),INTERVAL 1 MONTH)
+		and 
+			a.complaintDate&lt;=DATE_SUB(DATE_SUB(CURDATE(),INTERVAL EXTRACT(DAY FROM NOW())-1 DAY),INTERVAL 0 MONTH)
+		order by 
+			a.complaintDate DESC 
+		limit #{startLimit},#{limitCount}
+	</select>
+	
+	<!--  查询符合拒付预警费的订单-->
+	<select id="queryConfirmTransDisWarningOrder" resultType="com.fhtpay.transaction.model.TransDisWarningOrder">
+		select a.tradeNo,b.cardType,b.currencyId,b.bankName from gw_trans_complaint_info  a LEFT JOIN gw_trans_info b ON a.tradeNo=b.tradeNo 
+		where 
+			b.merNo=#{merNo}
+		and 
+			b.terNo=#{terNo}
+		and 
+			a.type='0'
+		and
+			a.complaintType=(SELECT id FROM gw_trans_complaint_type_info WHERE cValue='拒付预警') 
+		and (a.amount IS NULL OR a.amount=0)
+		order by 
+			a.complaintDate DESC 
+	</select>
+	
+	<!--  更加交易流水号更新已经收取拒付预警费的订单-->
+	<update id="updateConfirmTransDisWarningOrder">
+		update 
+			gw_trans_complaint_info 
+		set 
+			amount=#{complaint.amount}
+		where
+			tradeNo=#{complaint.tradeNo}
+	</update>
+	
+	<select id="queryCanTimeToPaymentCardInfo" resultType="com.fhtpay.task.model.CheckToNoInfo">
+		select
+			a.* 
+			,
+			(SELECT shaKey FROM gw_merchant_terno_info where gw_merchant_terno_info.merNo=a.merNo and gw_merchant_terno_info.terNo=a.terNo) as shaKey
+		from 
+		gw_check_to_no_info a left join gw_trans_info b
+		on a.checkToNo=b.checkToNo
+		and b.transDate>=#{dateStart}
+		and (b.transType='sales' or transType='test')
+		where 
+		a.enabled=1
+		and  a.merNo=#{merNo}
+		and a.terNo=#{terNo}
+		and 
+		a.balance>=a.ceil
+		group by a.checkToNo
+		having count(a.checkToNo)&lt;a.countLimit
+		
+	</select>
+	<update id="updateCheckToInfoByCheckToNo">
+		update 
+			gw_check_to_no_info
+		set 
+			successCount=successCount+#{successCount},
+			count=count+#{count},
+			balance=balance-#{balance}
+		where 
+			checkToNo=#{checkToNo}
+	</update>
+	<select id="queryHowManyTimeNeedPay" resultType="com.fhtpay.task.model.CheckToNoInfo">
+		select merNo,terNo from gw_check_to_no_info
+		where enabled=1
+		and 
+		balance>=ceil
+		group by merNo,terNo
+	</select>
+	
+	<select id="queryRefundConfigInfoList" resultType="com.fhtpay.task.model.refundReturn.RefundConfigInfo">
+		SELECT
+			id,
+			merNo,
+			terNo,
+			configURL,
+			createDate,
+			createBy
+		FROM
+			gw_trans_refund_return_config_info
+	</select>
+	
+	<select id="queryRefundTransInfo" resultType="com.fhtpay.task.model.refundReturn.RefundTransInfo">
+		SELECT
+			id,
+			tradeNo,
+			merNo,
+			terNo,
+			flag,
+			returnFlag,
+			status AS respCode
+		FROM
+			gw_refund_info
+		WHERE
+			merNo=#{merNo}
+		AND
+			terNo=#{terNo}
+		AND
+			flag=#{flag}
+		AND
+			returnFlag=#{returnFlag}
+	</select>
+	
+	<update id="updateRefundTransReturnFlagInfo">
+		UPDATE
+			gw_refund_info
+		SET
+			returnFlag=#{returnFlag}
+		WHERE
+			id=#{id}
+		AND
+			returnFlag=0
+	</update>
+	
+	<select id="queryMerchantWebSiteInfo" resultType="com.fhtpay.task.model.website.MerchantWebSiteInfo">
+		SELECT
+			id,
+			merNo,
+			terNo,
+			merWebSite
+		FROM
+			gw_merchant_website_info
+		WHERE
+			status=#{status}
+		AND
+			appDate&lt;=DATE_ADD(NOW(), INTERVAL -#{month} MONTH)
+		AND 
+			merNo not in (1888 ,
+							6888 ,
+							7888 ,
+							9888 ,
+							10888,
+							11888,
+							12888,
+							13888,
+							14888,
+							15888,
+							17888,
+							21888,
+							22888,
+							23888,
+							24888,
+							25888,
+							26888,
+							27888,
+							28888,
+							29888,
+							30888,
+							31888,
+							32888,
+							33888,
+							34888,
+							35888,
+							36888,
+							37888,
+							38888,
+							39888,
+							40888,
+							41888,
+							42888,
+							43888,
+							44888,83888,162888,136888,183888,232888,71888,127888,73888,322888,155888)
+	</select>
+	
+	<select id="queryMerchantWebSiteTransCountInfo" resultType="java.lang.Integer">
+		SELECT
+			COUNT(id)
+		FROM
+			gw_trans_info
+		WHERE
+			transType=#{transType}
+		AND
+			payWebSite=#{webSite}
+		AND
+			transDate>=DATE_ADD(NOW(), INTERVAL -#{month} MONTH)
+	</select>
+	
+	<update id="updateMerchantWebSiteInfo">
+		UPDATE
+			gw_merchant_website_info
+		SET
+			status=#{status},
+			sysOperatedStatus=#{operatedStatus},
+			sysOperatedDate=NOW(),
+			message=#{remark}
+		WHERE
+			id=#{id}
+	</update>
+	
+	<select id="canHandMerNo" resultType="com.fhtpay.transaction.model.SettleTypeInfo">
+		select a.merNo,a.terNo
+		from 
+		gw_hand_settle_trans_info a left join gw_trans_info b on a.tradeNo=b.tradeNo
+		where 
+		a.isAccess=0
+		and
+		b.transType='sales'
+		and 
+		b.batchNo is null 
+		and 
+		b.respCode='00'
+		and 
+		b.isChecked=1
+		and 
+		b.access=1
+		group by a.merNo,a.terNo
+	</select>
+	<select id="queryCanSettleHandTradeNos" resultType="string">
+		select a.tradeNo
+		from 
+		gw_hand_settle_trans_info a left join gw_trans_info b on a.tradeNo=b.tradeNo
+		where 
+		a.isAccess=0
+		and
+		b.transType='sales'
+		and 
+		b.batchNo is null 
+		and 
+		b.respCode='00'
+		and 
+		b.isChecked=1
+		and 
+		b.access=1
+		and a.merNo=#{info.merNo}
+		and a.terNo=#{info.terNo}
+	</select>
+	<update id="updateHandTransStatusToAccess">
+		update gw_hand_settle_trans_info set isAccess=#{isAccess},moneyDate=now(),remark='系统入账'
+		where
+		tradeNo in 
+		<foreach collection="list" close=")" open="(" separator="," item="tradeNo">
+			#{tradeNo}
+		</foreach>
+	</update>
+	
+	<select id="queryTransCallbackInfoList" resultType="com.fhtpay.task.model.callback.TransCallbackInfo">
+		SELECT
+			a.id,
+			a.tradeNo AS tradeNo,
+			a.sendEmail,
+			a.emailModel,
+			b.transAmount AS amount,
+			b.merBusCurrency AS currency,
+			b.email AS email,
+			b.orderNo AS orderNo,
+			b.transDate AS transDate,
+			c.trackNo AS trackingNO,
+			c.Iogistics AS agency,
+			b.payWebSite AS website,
+			d.cardFullName AS name
+		FROM
+			gw_trans_callback a
+			LEFT JOIN gw_trans_info b ON b.tradeNo=a.tradeNo
+			LEFT JOIN gw_GoodsPress c ON c.tradeNo=a.tradeNo
+			LEFT JOIN gw_trans_order_info d ON d.tradeNo=a.tradeNo
+		WHERE
+			a.sendStatus=0
+	</select>
+	
+	<update id="updateTransCallbackInfo">
+		UPDATE
+			gw_trans_callback
+		SET
+			sendStatus=#{sendStatus},
+			sendTime=NOW()
+		WHERE
+			id=#{id}
+		<if test="sendStatus==2">
+			AND
+				sendStatus!=1
+		</if>
+	</update>
+	
+	<select id="queryTransGoodsInfoList" resultType="com.fhtpay.task.model.callback.TransGoodsInfo">
+		SELECT
+			goodsName,
+			quantity,
+			goodsPrice
+		FROM
+			gw_trans_goods_info
+		WHERE
+			tradeNo=#{tradeNo}
+	</select>
+	
+	<select id="queryEmailInfoByEmail" resultType="com.fhtpay.email.model.EmailInfo">
+		select 
+			* 
+		from 
+			gw_email_info 
+		where 
+			emailAccount=#{email}
+		and
+			enabled=1 
+		<!-- 
+		and 
+			emailType=1 
+		 -->
+		limit 
+			1
+	</select>
+	
+	<select id="queryMerchantTraceInfoList" resultType="com.fhtpay.task.model.trace.MerchantTraceInfo">
+		SELECT
+			a.id,
+			a.tradeNo,
+			c.merNo,
+			a.trackNo,
+			c.transDate AS tradetime,
+			a.operationStatus,
+			b.grCountry AS country
+		FROM
+			gw_GoodsPress a
+			LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			LEFT JOIN gw_trans_info c ON c.tradeNo=a.tradeNo
+		WHERE
+			c.transDate &lt; DATE_ADD(NOW(),INTERVAL -3 DAY)
+		AND
+			c.transDate &gt; DATE_ADD(NOW(),INTERVAL -3 MONTH)
+		AND
+			a.operationStatus=0
+		AND
+			c.merNo=#{merNo}
+		AND
+			a.trackNo!=''
+		AND
+			a.trackNo IS NOT NULL
+		<!-- 
+		AND
+			a.Iogistics=#{Iogistics}
+		 -->
+	</select>
+	
+	<update id="updateGoodsPressOperationStatusById">
+		UPDATE
+			gw_GoodsPress
+		SET
+			operationStatus=#{operationStatus},
+			remark='系统更新',
+			lastModifyBy='SYS',
+			lastDateTime=NOW()
+		WHERE
+			id=#{id}
+	</update>
+	
+	<select id="queryTraceCountryInfoByCountryNameCN" resultType="com.fhtpay.task.model.trace.TraceCountryInfo">
+		SELECT
+			countryNameSimple AS countryCode
+		FROM
+			gw_country_info
+		WHERE
+			countryNameCN=#{countryNameCN}
+	</select>
+	
+	<select id="queryMerchantInfoList" resultType="com.fhtpay.task.model.trace.MerchantInfo">
+		SELECT
+			merNo
+		FROM
+			gw_settle_type_info
+		WHERE
+			settleType='signed'
+		GROUP BY
+			merNo
+	</select>
+	
+	<select id="queryDisFineStepInfoById" resultType="com.fhtpay.transaction.model.DisFineStepInfo">
+		select * from gw_disfine_step_info where id=#{stepId}
+	</select>
+	
+	<select id="selectMaxSyspId" resultType="int">
+		SELECT MAX(id) FROM gw_suspicious_mer_trans_info WHERE createDate&lt;=DATE_ADD(NOW(),INTERVAL -6 MONTH)
+	</select>
+	<delete id="deleteFromMerTransSuspInfo">
+		delete from gw_suspicious_mer_trans_info where id&lt;=#{syspId}
+	</delete>
+	<delete id="deleteFromTransSuspInfo">
+		delete from gw_suspicious_trans_order_info where syspId&lt;=#{syspId}
+	</delete>
+	
+	<select id="queryThreatMetrixDisTrans" resultType="com.fhtpay.task.model.ThreatMetrixResultInfo">
+		SELECT 
+			b.* 
+		FROM 
+			gw_trans_complaint_info a INNER JOIN 
+			gw_threadmetrix_result_info b ON a.tradeNo=b.tradeNo
+		WHERE 
+			a.type=1 
+		AND
+			a.isSp=0 
+		AND 
+			a.complaintType=(SELECT id FROM gw_trans_complaint_type_info WHERE cValue='没有授权交易')
+		AND
+			a.complaintDate>=DATE_ADD(NOW(),INTERVAL  -2 DAY) 
+	</select>
+	<select id="querySuspiciousNqTransInfoByMerNo" resultType="com.fhtpay.task.model.suspicious.SuspiciousTransDeatailInfo">
+			SELECT 
+				${vo.paramValue} AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM 
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND 
+				a.transType='sales'
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -1 DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				${vo.paramValue}!=${vo.paramRuleValue}
+			and 
+				length(${vo.paramValue})=2
+			and 
+				length(${vo.paramRuleValue})=2
+			GROUP BY 
+				${vo.paramValue}
+	</select>
+	<select id="querySuspiciousNqTransInfoByMerNoAndTerNo" resultType="com.fhtpay.task.model.suspicious.SuspiciousTransDeatailInfo">
+			SELECT 
+				${vo.paramValue} AS info,
+				COUNT(*) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+			FROM 
+				gw_trans_info a
+				LEFT JOIN gw_trans_order_info b ON b.tradeNo=a.tradeNo
+			WHERE
+				a.respCode = '00'
+			AND 
+				a.transType='sales'
+			AND
+				a.transDate>=DATE_ADD(NOW(),INTERVAL -1 DAY)
+			AND
+				a.merNo=#{vo.mer.merNo}
+			AND
+				a.terNo=#{vo.mer.terNo}
+			AND
+				${vo.paramValue}!=${vo.paramRuleValue}
+			and 
+				length(${vo.paramValue})=2
+			and 
+				length(${vo.paramRuleValue})=2
+			GROUP BY 
+				${vo.paramValue}
+	</select>
+	
+	<select id="queryTransParameterInfo" resultType="com.fhtpay.task.model.suspicious.TransParameterInfo">
+		SELECT  a.tradeNo,${info}
+		FROM
+		gw_trans_info a LEFT JOIN gw_trans_order_info b ON a.tradeNo=b.tradeNo
+		where 
+		merNo=#{mer.merNo}
+		and 
+		terNo=#{mer.terNo}
+		and 
+		transType='sales'
+		and 
+		respCode='00'
+		and 
+		transDate>=DATE_ADD(curdate(),INTERVAL -1 DAY)
+		and
+			length(${param1})>2
+		<if test="param2 != null and param2 != '' ">
+		and
+			length(${param2})>2
+		</if>
+		and  
+		transDate&lt;=curdate()
+	</select>
+	<select id="querySameParameterMatchRefundDis" resultType="com.fhtpay.task.model.suspicious.SuspiciousTransDeatailInfo">
+		SELECT ${mainParameter} AS info,
+				COUNT(a.tradeNo) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+		FROM
+		gw_trans_info a LEFT JOIN gw_trans_order_info b ON a.tradeNo=b.tradeNo
+		WHERE 
+		(
+		transDate>=DATE_ADD(NOW(),INTERVAL -${rule.colKeyValue} DAY)
+		and 
+		transDate&lt;=curdate()
+		and 
+		transType='sales'
+		AND 
+		respCode='00'
+		 
+		<if test="info.grAddress != null and info.grAddress != '' ">
+			AND grAddress=#{info.grAddress}
+		</if>
+		<if test="info.cardAddress != null and info.cardAddress != '' ">
+			AND cardAddress=#{info.cardAddress}
+		</if>
+		<if test="info.checkToNo != null and info.checkToNo != '' ">
+			AND checkToNo=#{info.checkToNo}
+		</if>
+		<if test="info.IPAddress != null and info.IPAddress != '' ">
+			AND IPAddress=#{info.IPAddress}
+		</if>
+		<if test="info.email != null and info.email != '' ">
+			AND email=#{info.email}
+		</if>
+		<if test="paramType == 1 ">
+			AND a.isRefund != 0
+		</if>
+		<if test="paramType == 2 ">
+			AND a.isDishonor != 0
+		</if>
+		) or a.tradeNo=#{info.tradeNo}
+		GROUP BY ${mainParameter}
+		HAVING COUNT(a.tradeNo)>${rule.colValue}
+	</select>
+	
+	<select id="querySameParameterMatchDifferentSuccess" resultType="com.fhtpay.task.model.suspicious.SuspiciousTransDeatailInfo">
+		SELECT  ${mainParameter} AS info,
+				COUNT(a.tradeNo) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+		FROM
+		gw_trans_info a LEFT JOIN gw_trans_order_info b ON a.tradeNo=b.tradeNo
+		WHERE 
+		(
+		transDate>=DATE_ADD(NOW(),INTERVAL -${rule.colKeyValue} DAY)
+		and 
+		transDate&lt;=curdate()
+		and 
+		transType='sales'
+		AND 
+		respCode='00'
+		and 
+		${mainParameter} = (select ${mainParameter} from gw_trans_info a LEFT JOIN gw_trans_order_info b ON a.tradeNo=b.tradeNo
+		where a.tradeNo=#{info.tradeNo}
+		)
+		and ${matchParameter} != 
+			(select ${matchParameter} from gw_trans_info a LEFT JOIN gw_trans_order_info b ON a.tradeNo=b.tradeNo
+		where a.tradeNo=#{info.tradeNo}
+		)
+		) or a.tradeNo=#{info.tradeNo}
+		GROUP BY ${mainParameter}
+		HAVING COUNT(a.tradeNo)>${rule.colValue}
+	</select>
+	
+	<select id="querySameParameterMatchDifferentRefundDis" resultType="com.fhtpay.task.model.suspicious.SuspiciousTransDeatailInfo">
+		SELECT  ${mainParameter} AS info,
+				COUNT(a.tradeNo) AS count,
+				GROUP_CONCAT(a.tradeNo) AS tradeNoList
+		FROM
+		gw_trans_info a LEFT JOIN gw_trans_order_info b ON a.tradeNo=b.tradeNo
+		WHERE 
+		(
+		transDate>=DATE_ADD(NOW(),INTERVAL -${rule.colKeyValue} DAY)
+		and 
+		transDate&lt;=curdate()
+		and 
+		transType='sales'
+		AND 
+		respCode='00'
+		and 
+		${mainParameter} = (select ${mainParameter} from gw_trans_info a LEFT JOIN gw_trans_order_info b ON a.tradeNo=b.tradeNo
+		where a.tradeNo=#{info.tradeNo}
+		)
+		and ${matchParameter} != 
+			(select ${matchParameter} from gw_trans_info a LEFT JOIN gw_trans_order_info b ON a.tradeNo=b.tradeNo
+		where a.tradeNo=#{info.tradeNo}
+		)
+		<if test="paramType == 4 ">
+			AND a.isRefund != 0
+		</if>
+		<if test="paramType == 5 ">
+			AND a.isDishonor != 0
+		</if>
+		)or a.tradeNo=#{info.tradeNo}
+		GROUP BY ${mainParameter}
+		HAVING COUNT(a.tradeNo)>${rule.colValue}
+	</select>
+	<select id="queryTransInfoForExcelByDate" resultType="com.fhtpay.task.model.TransInfoForExcel">
+		SELECT 
+		merNo,terNo,orderNo,merTransAmount,merBusCurrency,a.tradeNo,transDate,respCode,respMsg,IPAddress,ipCountry,riskScore,grCountry,grState,grCity,grAddress,cardCountry,cardState,cardCity,grPerName,cardType,webInfo
+		,
+		group_concat('{','goodsName:',goodsName,','
+		'quantity:',quantity,','
+		'goodsPrice:',goodsPrice
+		,'}') as goodsString
+		FROM gw_trans_info a LEFT JOIN gw_trans_order_info b ON a.tradeNo=b.tradeNo
+		left join  gw_trans_goods_info c on a.tradeNo=c.tradeNo 
+		WHERE transType='sales'
+		AND transDate>=#{date}
+		AND transDate&lt;='${date} 23:59:59.999'
+		group by a.tradeNo
+	</select>
+	
+	<select id="queryNeedDateStr" resultType="com.fhtpay.task.model.PoolSettleInfo">
+	SELECT * FROM (
+		SELECT DATE_FORMAT(transDate,'%Y-%m-%d') as dateStr,merNo,terNo
+		FROM gw_trans_info WHERE transDate>(SELECT max(dateStr) FROM gw_date_for_merchant_trans_info) AND transDate&lt;CURDATE()
+		and transType='sales' and respCode='00'
+		GROUP BY DATE_FORMAT(transDate,'%Y-%m-%d')
+		UNION
+		SELECT DATE_FORMAT(moneyDate,'%Y-%m-%d')AS dateStr,merNo,terNo FROM gw_merchant_account_access WHERE moneyDate>(SELECT max(dateStr) FROM gw_date_for_merchant_trans_info) AND moneyDate&lt;CURDATE()
+		GROUP BY DATE_FORMAT(moneyDate,'%Y-%m-%d'),merNo,terNo
+		)as t ORDER BY dateStr
+	</select>
+	<insert id="insertDateForMerchantDateFormInfo">
+		insert into gw_date_for_merchant_trans_info(
+			dateStr,
+			createDate
+		)values(
+			#{date},
+			now()
+		)
+	</insert>
+	<!-- 查询上一个商户日报信息  -->
+	<select id="queryMerchantDateFormProInfo" resultType="com.fhtpay.task.model.PoolSettleInfo">
+		select * from gw_merchant_trans_date_info 
+		where 
+			merNo=#{merNo}
+			and 
+			terNo=#{terNo}
+		order by dateStr DESC limit 1
+	</select>
+	<!-- 查询商户要生成的日报信息  -->
+	<select id="queryMerchantDateFormInfo" resultType="com.fhtpay.task.model.PoolSettleInfo">
+		select 
+			merNo,
+			terNo,
+			dateStr, 
+			currency, 
+			sum(successCount) as successCount,
+			sum(settleAmount) as settleAmount, 
+			sum(feeAmount) as feeAmount, 
+			sum(singleAmount) as singleAmount, 
+			sum(bondAmount) as bondAmount, 
+			sum(refundAmount) as refundAmount,
+			sum(disAmount) as disAmount, 
+			sum(thawAmount) as thawAmount, 
+			sum(froznAmount) as froznAmount, 
+			sum(cashAmount) as cashAmount, 
+			sum(bondCashAmount) as bondCashAmount,
+			sum(failFee) as failFee, 
+			sum(transDebit) as transDebit, 
+			sum(transBack) as transBack,
+			sum(bondDebit) as bondDebit, 
+			sum(bondBack) as bondBack, 
+			sum(settleChangeFrozn) as settleChangeFrozn, 
+			sum(settleChangeThaw) as settleChangeThaw, 
+			sum(bondFrozn) as bondFrozn,
+			sum(bondThaw) as bondThaw, 
+			sum(disFine) as disFine, 
+			sum(refundFee) as refundFee, 
+			sum(refundFeeBack) as refundFeeBack, 
+			sum(disFee) as disFee
+		from
+		(
+			SELECT 
+				merNo,
+				terNo,
+				DATE_FORMAT(moneyDate,'%Y-%m-%d') AS dateStr,
+				currency,
+				0 as successCount,
+				0 AS settleAmount,
+				0 AS feeAmount,
+				0 AS singleAmount,
+				0 AS bondAmount,
+				SUM(CASE WHEN cashType =-3 THEN amount ELSE 0 END )refundAmount,
+				SUM(CASE WHEN cashType =-4 THEN amount ELSE 0 END )disAmount,
+				SUM(CASE WHEN cashType =2 THEN amount ELSE 0 END )thawAmount,
+				SUM(CASE WHEN cashType =-1 THEN amount ELSE 0 END )froznAmount,
+				SUM(CASE WHEN cashType =1 THEN amount ELSE 0 END )cashAmount,
+				SUM(CASE WHEN cashType =2 THEN amount ELSE 0 END )bondCashAmount,
+				SUM(CASE WHEN cashType =-12 THEN amount ELSE 0 END )failFee,
+				SUM(CASE WHEN cashType =5 THEN amount ELSE 0 END )transDebit,
+				SUM(CASE WHEN cashType =6 THEN amount ELSE 0 END )transBack,
+				SUM(CASE WHEN cashType =7 THEN amount ELSE 0 END )bondDebit,
+				SUM(CASE WHEN cashType =8 THEN amount ELSE 0 END )bondBack,
+				SUM(CASE WHEN cashType =4 THEN amount ELSE 0 END )settleChangeFrozn,
+				SUM(CASE WHEN cashType =3 THEN amount ELSE 0 END )settleChangeThaw,
+				SUM(CASE WHEN cashType =9 THEN amount ELSE 0 END )bondFrozn,
+				SUM(CASE WHEN cashType =10 THEN amount ELSE 0 END )bondThaw,
+				SUM(CASE WHEN cashType =-11 THEN amount ELSE 0 END )disFine,
+				SUM(CASE WHEN cashType =-13 THEN amount ELSE 0 END )refundFee,
+				SUM(CASE WHEN cashType =-14 THEN amount ELSE 0 END )refundFeeBack,
+				SUM(CASE WHEN cashType =-15 THEN amount ELSE 0 END )disFee
+			FROM 
+				gw_merchant_account_access
+			WHERE 
+				moneyDate IS NOT NULL 
+			AND
+				DATE_FORMAT(moneyDate,'%Y-%m-%d')=#{dateStr}
+			and 
+				merNo=#{merNo}
+			and 
+				terNo=#{terNo}
+			GROUP BY
+				merNo,
+				terNo,
+				DATE_FORMAT(moneyDate,'%Y-%m-%d')
+			UNION
+			SELECT 
+				merNo,
+				terNo,
+				DATE_FORMAT(transDate,'%Y-%m-%d') AS dateStr,
+				merSettleCurrency as currency,
+				count(tradeNo) as successCount,
+				SUM(merSettleAmount) settleAmount,
+				SUM(merForAmount)*-1 AS feeAmount,
+				SUM(singleFee)*-1 AS singleAmount,
+				SUM(bondAmount) AS bondAmount,
+				0 as refundAmount,
+				0 as disAmount,
+				0 as thawAmount,
+				0 as froznAmount,
+				0 as cashAmount,
+				0 as bondCashAmount,
+				0 as failFee,
+				0 as transDebit,
+				0 as transBack,
+				0 as bondDebit,
+				0 as bondBack,
+				0 as settleChangeFrozn,
+				0 as settleChangeThaw,
+				0 as bondFrozn,
+				0 as bondThaw,
+				0 as disFine,
+				0 as refundFee,
+				0 as refundFeeBack,
+				0 as disFee
+			FROM
+				gw_trans_info
+			WHERE 
+				DATE_FORMAT(transDate,'%Y-%m-%d')=#{dateStr}
+			AND
+				transType='sales'
+			AND 
+				respCode='00'
+			AND
+				merNo=#{merNo}
+			AND
+				terNo=#{terNo}
+			GROUP BY
+				merNo,terNo,DATE_FORMAT(transDate,'%Y-%m-%d')
+		) AS t
+		group by merNo,
+			terNo,
+			dateStr
+		
+	</select>
+	<insert id="insertMerchantDateFormInfo">
+		INSERT INTO gw_merchant_trans_date_info (
+			merNo,
+			terNo,
+			dateStr, 
+			currency, 
+			successCount,
+			settleAmount, 
+			feeAmount, 
+			singleAmount, 
+			bondAmount, 
+			refundAmount,
+			disAmount, 
+			thawAmount, 
+			froznAmount, 
+			cashAmount, 
+			bondCashAmount,
+			totalAmount, 
+			balance, 
+			failFee, 
+			transDebit, 
+			transBack,
+			bondDebit, 
+			bondBack, 
+			settleChangeFrozn, 
+			settleChangeThaw, 
+			bondFrozn,
+			bondThaw, 
+			disFine, 
+			refundFee, 
+			refundFeeBack, 
+			disFee
+		)VALUES (
+			#{merNo},
+			#{terNo},
+			#{dateStr}, 
+			#{currency}, 
+			#{successCount},
+			#{settleAmount}, 
+			#{feeAmount}, 
+			#{singleAmount}, 
+			#{bondAmount}, 
+			#{refundAmount},
+			#{disAmount}, 
+			#{thawAmount}, 
+			#{froznAmount}, 
+			#{cashAmount}, 
+			#{bondCashAmount},
+			#{totalAmount}, 
+			#{balance}, 
+			#{failFee}, 
+			#{transDebit}, 
+			#{transBack},
+			#{bondDebit}, 
+			#{bondBack}, 
+			#{settleChangeFrozn}, 
+			#{settleChangeThaw}, 
+			#{bondFrozn},
+			#{bondThaw}, 
+			#{disFine}, 
+			#{refundFee}, 
+			#{refundFeeBack}, 
+			#{disFee}
+		)
+	</insert>
+	<select id="queryNeedsUploadTrackInfo" resultType="com.fhtpay.transaction.model.IppTrackInfo" >
+		SELECT 
+		a.tradeNo,
+		b.bankrefno AS oid,
+		(SELECT configValue FROM gw_currency_config_info WHERE gw_currency_config_info.currencyId=c.id AND gw_currency_config_info.configName='site_id') AS site_id,
+		(SELECT configValue FROM gw_currency_config_info WHERE gw_currency_config_info.currencyId=c.id AND gw_currency_config_info.configName='mid') AS `mid`,
+		(SELECT configValue FROM gw_currency_config_info WHERE gw_currency_config_info.currencyId=c.id AND gw_currency_config_info.configName='api_key') AS api_key,
+		a.Iogistics AS tracking_company,
+		a.trackNo AS tracking_number
+		FROM 
+		gw_goodspress a LEFT JOIN gw_trans_info b 
+		ON a.tradeNo=b.tradeNo
+		LEFT JOIN gw_currency_info c ON b.currencyId=c.id
+		LEFT JOIN gw_bank_info d ON c.bankId=d.id
+		WHERE
+		a.merNo IS NULL   
+		AND d.id=71
+	</select>
+	
+	<update id="updateGoodsPressByTradeNo">
+		update gw_goodspress set merNo='1888' where tradeNo=#{oid}
+	</update>
+	
+	<!-- 查询超过4天未确认的ecp预授权成功的订单 -->
+	<select id="queryEcpAuthOrderForCapture" resultType="string">
+		SELECT
+		  a.tradeNo
+		FROM gw_trans_info a
+		WHERE a.access = 0
+		    AND a.respCode = '0000'
+		    AND a.tradeNo LIKE 'BR%'
+		    AND a.transDate &lt;= DATE_ADD(NOW(),INTERVAL - 4 DAY)
+		 ORDER BY a.transDate ASC
+		 LIMIT 5
+	</select>
+</mapper>

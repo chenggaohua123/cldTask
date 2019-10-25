@@ -1,0 +1,118 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>持卡人回访</title>
+<style type="text/css">
+body{
+	background:#f5f5f5;
+	font: 14px "Arial",sans-serif;
+}
+#main{
+	width:90%;
+	margin:60px auto;
+	padding:20px;
+	border:1px solid #f2f1f1;
+	border-radius: 5px;
+	background:#fff;
+	}
+#transactions{
+	font: 14px "Arial",sans-serif;
+	line-height:25px;
+    margin: 20px 10px 10px 0;  
+}
+table #transactions {
+    clear: both;
+    margin-bottom: 10px;
+    text-align: left;
+}
+table {
+    margin-bottom: 10px;
+    border: 1px solid #DDD;
+	width: 95%;
+	border-collapse: collapse;
+    border-spacing: 0;
+}
+td{
+	border: 1px solid #ddd;
+	padding:10px;
+	}
+
+</style>
+</head>
+
+<body>
+   <div id="main">
+    <h2>Dear Customer,</h2>
+    <p id="transactions">
+    	We are a payment platform company. <br/>
+    	Please check the following information of the order from our seller's website deals3c.com<br/>
+	Deals3c is a mobile phone accessories mall, providing mobile phone-related gadgets and ancillary supplies.<br>
+	We checked that you have placed the order from this website and needed to confirm you have bought correspondent product 
+and the merchandise you received is described as the website.<br>
+    </p><br/>
+    <p id="transactions">
+	Therefore, please answer:
+    </p>
+    <p id="transactions">
+    	1. Have you visited our seller's websitec deals3c.com ?<br/>
+    	A. Yes&nbsp;&nbsp;&nbsp;&nbsp;B. No &nbsp;&nbsp;&nbsp;&nbsp; C. If not, please tell us the original website you visited<br/>
+    </p><br/>
+    <p id="transactions">
+    	2. The merchandise that you received was the same as the website described?<br/>
+    	A. Yes&nbsp;&nbsp;&nbsp;&nbsp;B.No&nbsp;&nbsp;&nbsp;&nbsp;C.Not quite the same.<br/>
+    </p><br/>
+    <p id="transactions">
+    	3.  What products you have received? Are you satisfied with the products you bought?<br/>
+    	A. Phone-related accessories&nbsp;&nbsp;&nbsp;&nbsp;B.Clothes&nbsp;&nbsp;&nbsp;&nbsp; C. Others( Please tell us what product you have received)<br/>
+    </p><br/>
+    
+    <table id="dataTable1" >
+		<tbody>
+		<tr>
+		    <td width="20%">Name:</td>
+		    <td>${name}</td>
+		</tr>
+		<tr>
+	    	<td>Order No.:</td>
+	    	<td>${orderNo}</td>
+		</tr>
+		<tr>
+		    <td>Payment No:</td>
+		    <td>${tradeNo}</td>
+		</tr>
+		<tr>
+	    	<td>Transaction Time：</td>
+		    <td>${transDate}</td>
+		</tr>
+		<tr>
+		    <td>Amount:</td>
+		    <td>${currency} ${amount}</td>
+		</tr>
+		<tr>
+	    	<td>Website：</td>
+		    <td>${website}</td>
+		</tr>
+		<tr>
+	    	<td>Merchandise：</td>
+		    <td>${merchandise}</td>
+		</tr>
+		<tr>
+			<td>Forwarder agency:</td>
+			<td>${agency}</td>
+		</tr>
+		<tr>
+			<td>Tracking NO:</td>
+			<td>${trackingNo}</td>
+		</tr>
+		
+		</tbody>
+        </table>
+        
+      <p>Thank you for your attention and wish you have a good day. </p>
+      <h4>Customer Service Team</h4> 
+      
+    </div>
+    
+</body>
+</html>
